@@ -1,0 +1,431 @@
+{% extends 'base.html' %}
+{% block content %}
+<div id="toast-root" class="toast-root"></div>
+
+<!-- ==================== AUTH SCREEN ==================== -->
+<section id="auth-screen" class="screen">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <svg class="auth-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <h1>{{ config.APP_NAME }}</h1>
+      <p>Secure, private messaging</p>
+    </div>
+    <div class="auth-tabs" id="auth-tabs">
+      <button class="auth-tab is-active" type="button" data-auth-view="login">Sign in</button>
+      <button class="auth-tab" type="button" data-auth-view="register">Register</button>
+      <button class="auth-tab" type="button" data-auth-view="reset">Reset</button>
+    </div>
+    <form id="login-form" class="auth-form">
+      <input name="username" type="text" placeholder="Username" maxlength="24" autocomplete="username" required>
+      <input name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+      <button class="btn-primary" type="submit">Sign in</button>
+    </form>
+    <form id="register-form" class="auth-form hidden">
+      <input name="username" type="text" placeholder="Username" maxlength="24" autocomplete="username" required>
+      <input name="password" type="password" placeholder="Password (10+ chars)" autocomplete="new-password" required>
+      <button class="btn-primary" type="submit">Create account</button>
+    </form>
+    <form id="reset-form" class="auth-form hidden">
+      <input name="username" type="text" placeholder="Username" maxlength="24" autocomplete="username" required>
+      <input name="verification_code" type="text" placeholder="TOTP or recovery code" required>
+      <input name="new_password" type="password" placeholder="New password" autocomplete="new-password" required>
+      <button class="btn-primary" type="submit">Reset password</button>
+    </form>
+  </div>
+</section>
+
+<!-- ==================== TOTP SCREEN ==================== -->
+<section id="totp-screen" class="screen hidden">
+  <div class="auth-card">
+    <h2>Secure your account</h2>
+    <p class="text-muted">Set up Google Authenticator for password recovery.</p>
+    <button id="totp-generate" class="btn-primary" type="button">Generate QR code</button>
+    <div id="recovery-box" class="hidden" style="margin-top:1.2rem;display:flex;flex-direction:column;gap:1rem;">
+      <img id="totp-qr" class="totp-qr" alt="TOTP QR code">
+      <div>
+        <p class="label">Save these recovery codes offline:</p>
+        <ul id="recovery-list" class="recovery-list"></ul>
+      </div>
+      <form id="totp-confirm-form" class="auth-form">
+        <input name="code" inputmode="numeric" maxlength="6" placeholder="6-digit code from Authenticator" required>
+        <button class="btn-primary" type="submit">Confirm setup</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== APP SHELL ==================== -->
+<section id="app-shell" class="app-shell hidden">
+
+  <!-- LIST PANE -->
+  <div id="list-pane" class="list-pane">
+    <div class="list-header">
+      <span id="panel-title" class="panel-title">Chats</span>
+      <div class="panel-actions">
+        <button id="action-add-friend" class="icon-btn hidden" type="button" title="Add friend">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        </button>
+        <button id="action-create-group" class="icon-btn hidden" type="button" title="Create group">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="22" height="22"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="panel active" id="panel-chats">
+      <div id="story-bar" class="story-bar"></div>
+      <div id="conversation-list" class="chat-list"></div>
+    </div>
+    <div class="panel" id="panel-friends">
+      <div id="friend-list" class="chat-list"></div>
+    </div>
+    <div class="panel" id="panel-groups">
+      <div id="group-list" class="chat-list"></div>
+    </div>
+    <div class="panel" id="panel-settings">
+      <div class="settings-body">
+        <div class="settings-profile">
+          <div class="avatar avatar-lg" id="me-avatar-wrap">
+            <img id="me-avatar-img" class="avatar-img hidden" alt="Your avatar">
+            <span id="me-avatar-letter">?</span>
+          </div>
+          <div>
+            <div id="me-username" class="settings-name">@you</div>
+            <code id="my-uuid" class="uuid-chip small"></code>
+          </div>
+        </div>
+        <!-- Avatar upload -->
+        <div>
+          <p class="label">Profile picture</p>
+          <label class="file-label" style="cursor:pointer;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <input id="avatar-input" type="file" accept="image/*" style="display:none">
+            <span id="avatar-filename">Upload photo…</span>
+          </label>
+        </div>
+        <img id="my-qr" class="my-qr" alt="Your QR code">
+        <p class="label" style="margin-bottom:.4rem;">Your QR — share to add you as friend</p>
+        <hr class="divider">
+        <p class="label">Change password</p>
+        <form id="password-change-form" class="auth-form compact">
+          <input name="current_password" type="password" placeholder="Current password" required>
+          <input name="new_password" type="password" placeholder="New password" required>
+          <button class="btn-primary" type="submit">Update password</button>
+        </form>
+        <hr class="divider">
+        <button id="logout-button" class="btn-danger w-full" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign out
+        </button>
+      </div>
+    </div>
+
+    <nav class="bottom-nav">
+      <button class="nav-item active" type="button" data-panel="chats">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>Chats</span>
+      </button>
+      <button class="nav-item" type="button" data-panel="friends">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span>Friends</span>
+      </button>
+      <button class="nav-item nav-qr-btn" type="button" id="nav-qr-scan">
+        <div class="nav-qr-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="3" height="3"/><rect x="19" y="14" width="2" height="2"/><rect x="14" y="19" width="2" height="2"/><rect x="17" y="17" width="2" height="4"/><rect x="19" y="19" width="2" height="2"/></svg>
+        </div>
+        <span>Scan</span>
+      </button>
+      <button class="nav-item" type="button" data-panel="groups">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Groups</span>
+      </button>
+      <button class="nav-item" type="button" data-panel="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- CHAT PANE -->
+  <div id="chat-pane" class="chat-pane">
+    <div id="chat-empty" class="chat-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" width="64" height="64" opacity="0.18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <p>Select a chat to get started</p>
+    </div>
+    <div id="chat-active" class="chat-active hidden">
+      <header class="chat-header">
+        <button id="back-to-list" class="icon-btn" type="button" aria-label="Back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="chat-header-info">
+          <div class="avatar avatar-sm avatar-wrap" id="chat-avatar-wrap" data-partner-id="">
+            <img id="chat-avatar-img" class="avatar-img hidden" alt="">
+            <span id="chat-avatar-letter">?</span>
+          </div>
+          <div class="chat-header-text">
+            <div id="conversation-title" class="chat-name"></div>
+            <div id="conversation-subtitle" class="chat-sub"></div>
+          </div>
+        </div>
+        <div class="chat-header-btns">
+          <button id="voice-call" class="icon-btn" type="button" title="Voice call">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.76 12.9a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.77 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          </button>
+          <button id="video-call" class="icon-btn" type="button" title="Video call">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          </button>
+          <button id="share-group-link" class="icon-btn hidden" type="button" title="Copy group link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </button>
+          <button id="open-add-member" class="icon-btn hidden" type="button" title="Add member to group">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          </button>
+          <!-- Leave / delete conversation -->
+          <button id="leave-conversation" class="icon-btn" type="button" title="Leave / delete chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>
+          </button>
+        </div>
+      </header>
+      <!-- Typing indicator bar -->
+      <div id="typing-bar" class="typing-bar hidden">
+        <span id="typing-text" class="typing-text"></span>
+      </div>
+      <section id="message-list" class="message-list"></section>
+      <form id="composer-form" class="composer">
+        <input id="attachment-input" type="file" hidden>
+        <button id="upload-file" class="composer-icon-btn" type="button" title="Attach file">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        </button>
+        <textarea id="composer-input" placeholder="Message…" rows="1"></textarea>
+        <button id="record-voice" class="composer-icon-btn" type="button" title="Voice note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </button>
+        <button class="send-btn" type="submit" aria-label="Send">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ROUTE OVERLAY ==================== -->
+<section id="route-overlay" class="fullscreen-overlay hidden">
+  <div class="overlay-card">
+    <div class="overlay-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="40" height="40"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    </div>
+    <h2 id="route-title">Shared link</h2>
+    <p id="route-description" class="text-muted"></p>
+    <div class="overlay-actions">
+      <button id="route-primary-action" class="btn-primary" type="button">Continue</button>
+      <button id="route-secondary-action" class="btn-ghost hidden" type="button">Close</button>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== INCOMING CALL OVERLAY ==================== -->
+<section id="incoming-call-overlay" class="incoming-call-overlay hidden">
+  <div class="incoming-call-card">
+    <div class="incoming-call-avatar" id="incoming-caller-avatar">?</div>
+    <div class="incoming-call-info">
+      <p class="incoming-call-label">Incoming call</p>
+      <h2 id="incoming-caller-name">Unknown</h2>
+      <p id="incoming-call-mode-label" class="incoming-call-mode">Voice call</p>
+    </div>
+    <div class="incoming-call-actions">
+      <button id="decline-call-btn" class="call-action-btn decline" type="button" title="Decline">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
+      </button>
+      <button id="accept-call-btn" class="call-action-btn accept" type="button" title="Accept">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== IN-CALL OVERLAY ==================== -->
+<section id="call-overlay" class="call-overlay hidden">
+  <div class="call-container">
+    <div class="call-top">
+      <span class="call-mode-badge" id="call-mode-label">Call</span>
+      <h2 id="call-title"></h2>
+      <p id="call-duration" class="call-duration">00:00</p>
+    </div>
+    <div id="call-voice-grid" class="call-voice-grid hidden"></div>
+    <div class="call-grid" id="call-video-grid">
+      <div class="video-frame local-frame">
+        <video id="local-video" autoplay playsinline muted></video>
+        <span class="video-label">You</span>
+      </div>
+      <div id="remote-videos" class="remote-video-grid"></div>
+    </div>
+    <!-- In-call controls row -->
+    <div class="call-controls">
+      <button id="toggle-mute" class="call-ctrl-btn" type="button" title="Mute mic">
+        <svg id="mute-icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <svg id="mute-icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" class="hidden"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <span>Mute</span>
+      </button>
+      <button id="flip-camera" class="call-ctrl-btn" type="button" title="Flip camera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+        <span>Flip</span>
+      </button>
+
+      <button id="leave-call" class="call-leave-btn" type="button" title="End call">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
+      </button>
+    </div>
+  </div>
+</section>
+
+
+<!-- ==================== STORY VIEWER ==================== -->
+<section id="story-viewer" class="story-viewer hidden">
+  <div class="sv-progress-row" id="sv-progress-row"></div>
+  <div class="sv-top">
+    <div class="sv-user-info">
+      <div class="avatar avatar-sm sv-avatar" id="sv-avatar">?</div>
+      <div class="sv-user-text">
+        <div class="sv-username" id="sv-username"></div>
+        <div class="sv-time" id="sv-time"></div>
+      </div>
+    </div>
+    <button class="sv-close icon-btn" id="sv-close" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="22" height="22"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="sv-media-wrap" id="sv-media-wrap">
+    <div class="sv-ripple hidden" id="sv-ripple"></div>
+  </div>
+  <div class="sv-bottom">
+    <div class="sv-caption" id="sv-caption"></div>
+    <form id="sv-reply-form" class="sv-reply-form">
+      <input id="sv-reply-input" type="text" placeholder="Reply to story…" autocomplete="off">
+      <button class="send-btn" type="submit">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </form>
+  </div>
+</section>
+
+<!-- story file input (hidden) -->
+<input id="story-file-input" type="file" accept="image/*,video/*" hidden>
+
+<!-- ==================== DIALOGS ==================== -->
+<dialog id="friend-dialog" class="app-dialog">
+  <div class="dialog-inner">
+    <div class="dialog-header">
+      <h3>Add friend</h3>
+      <button class="icon-btn" type="button" data-close-dialog="friend-dialog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <p class="label">Your QR code</p>
+      <div class="qr-center">
+        <img id="friend-dialog-qr" class="qr-img" alt="Your QR code">
+      </div>
+      <code id="friend-dialog-uuid" class="uuid-chip block-chip"></code>
+      <hr class="divider">
+      <form id="add-friend-form" class="dialog-form">
+        <input name="uuid" type="text" placeholder="Paste UUID or invite link" required>
+        <button class="btn-primary" type="submit">Add friend</button>
+      </form>
+      <hr class="divider">
+      <button id="toggle-scan" class="btn-secondary w-full" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Scan QR with camera
+      </button>
+      <video id="scanner-video" class="scanner-video hidden" autoplay playsinline muted></video>
+      <hr class="divider">
+      <form id="scan-image-form" class="dialog-form" enctype="multipart/form-data">
+        <label class="file-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <input name="file" type="file" accept="image/*" required>
+          <span id="scan-image-filename">Upload QR image…</span>
+        </label>
+        <button class="btn-secondary" type="submit">Read image</button>
+      </form>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="group-dialog" class="app-dialog">
+  <div class="dialog-inner">
+    <div class="dialog-header">
+      <h3>Create group</h3>
+      <button class="icon-btn" type="button" data-close-dialog="group-dialog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="group-create-form" class="dialog-body dialog-form">
+      <input name="title" type="text" placeholder="Group name" maxlength="120" required>
+      <textarea name="description" placeholder="Description (optional)" rows="3"></textarea>
+      <button class="btn-primary" type="submit">Create group</button>
+    </form>
+  </div>
+</dialog>
+
+<dialog id="add-member-dialog" class="app-dialog">
+  <div class="dialog-inner">
+    <div class="dialog-header">
+      <h3>Add member</h3>
+      <button class="icon-btn" type="button" data-close-dialog="add-member-dialog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <p class="text-muted" style="font-size:.875rem;margin-bottom:.75rem;">Choose a friend to add to this group:</p>
+      <div id="add-member-list" class="chat-list"></div>
+    </div>
+  </div>
+</dialog>
+
+
+<dialog id="group-info-dialog" class="app-dialog">
+  <div class="dialog-inner">
+    <div class="dialog-header">
+      <h3>Group info</h3>
+      <button class="icon-btn" type="button" data-close-dialog="group-info-dialog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="dialog-body" id="group-info-body">
+      <!-- populated by JS -->
+    </div>
+  </div>
+</dialog>
+
+<!-- ==================== FULLSCREEN QR SCANNER ==================== -->
+<section id="nav-qr-overlay" class="fullscreen-overlay hidden nav-qr-overlay">
+  <div class="nav-qr-header">
+    <button class="icon-btn nav-qr-close" id="nav-qr-close" type="button" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="22" height="22"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <h3>Scan QR Code</h3>
+    <span></span>
+  </div>
+  <div class="nav-qr-body">
+    <div class="nav-qr-viewfinder">
+      <video id="nav-qr-video" autoplay playsinline muted class="nav-qr-video"></video>
+      <div class="nav-qr-frame">
+        <span class="qr-corner tl"></span><span class="qr-corner tr"></span>
+        <span class="qr-corner bl"></span><span class="qr-corner br"></span>
+        <div class="qr-scan-line"></div>
+      </div>
+    </div>
+    <p class="nav-qr-hint" id="nav-qr-hint">Point camera at a friend or group QR code</p>
+  </div>
+</section>
+
+<!-- Audio elements for sounds -->
+<audio id="sfx-qr-scan-success"   src="/static/sounds/qr-scan-success.mp3"   preload="none"></audio>
+<audio id="sfx-friend-added"       src="/static/sounds/friend-added.mp3"       preload="none"></audio>
+<audio id="sfx-message-send"       src="/static/sounds/message-send.mp3"       preload="none"></audio>
+<audio id="sfx-message-receive"    src="/static/sounds/message-receive.mp3"    preload="none"></audio>
+<audio id="sfx-voice-record-start" src="/static/sounds/voice-record-start.mp3" preload="none"></audio>
+<audio id="sfx-voice-send"         src="/static/sounds/voice-send.mp3"         preload="none"></audio>
+<audio id="sfx-call-ringback"      src="/static/sounds/call-ringback.mp3"      preload="none"></audio>
+<audio id="sfx-call-answer"        src="/static/sounds/call-answer.mp3"        preload="none"></audio>
+<audio id="sfx-incoming-ringtone"  src="/static/sounds/incoming-ringtone.mp3"  preload="none"></audio>
+<audio id="sfx-reaction"          src="/static/sounds/reaction.mp3"          preload="none"></audio>
+{% endblock %}

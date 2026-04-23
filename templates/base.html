@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{{ config.APP_NAME }}</title>
+    <meta name="theme-color" content="#12131a">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  </head>
+  <body data-page="{{ page }}" data-share-token="{{ share_token }}" data-friend-uuid="{{ friend_uuid }}">
+    {% block content %}{% endblock %}
+    {% set sound_names = [
+      'qr-scan-success',
+      'friend-added',
+      'message-send',
+      'message-receive',
+      'voice-record-start',
+      'voice-send',
+      'call-ringback',
+      'call-answer',
+      'incoming-ringtone'
+    ] %}
+    <div id="sfx-bank" hidden aria-hidden="true">
+      {% for name in sound_names %}
+        <audio id="sfx-{{ name }}" preload="auto">
+          <source src="{{ url_for('static', filename='sounds/' ~ name ~ '.ogg') }}" type="audio/ogg">
+          <source src="{{ url_for('static', filename='sounds/' ~ name ~ '.mp3') }}" type="audio/mpeg">
+        </audio>
+      {% endfor %}
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
+  </body>
+</html>

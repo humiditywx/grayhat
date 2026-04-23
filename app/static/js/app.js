@@ -1,0 +1,2729 @@
+/* ============================================================
+   ExpressMessenger – frontend  (full feature update)
+   Features:
+   - Profile pictures
+   - Last seen
+   - Typing indicators
+   - Delivered / Read receipts
+   - Leave / delete groups and private chats
+   - Delete individual messages
+   - Proper incoming call UI (overlay + ringtone)
+   - Proper in-call UI (mute, flip camera, screen share)
+   - Web Notifications (background tab alerts)
+   - Fixed voice message player (custom HTML5 player)
+   ============================================================ */
+
+const state = {
+  me: null,
+  friends: [],
+  conversations: [],
+  currentConversation: null,
+  currentMessages: [],
+  socket: null,
+  iceServers: [],
+  myUUID: '',
+  myAddLink: '',
+  bootstrapTimer: null,
+  routeAction: null,
+  currentPanel: 'chats',
+  scanner: { active: false, stream: null, detector: null, raf: null },
+  voiceRecorder: null,
+  voiceStream: null,
+  voiceChunks: [],
+  // Typing state
+  typingTimer: null,
+  typingUsers: {},      // { conversationId: { userId: { username, timer } } }
+  // Call state
+  call: {
+    active: false,
+    conversationId: null,
+    mode: 'video',
+    title: '',
+    localStream: null,
+    peers: new Map(),
+    muted: false,
+    screenSharing: false,
+    startTime: null,
+    durationTimer: null,
+    facingMode: 'user',
+    speakDetectors: new Map(),   // userId -> {analyser, animFrame, audioCtx}
+  },
+  // Pending incoming call data
+  incomingCall: null,
+  // Online presence
+  onlineUsers: new Set(),
+  // Stories
+  stories: [],          // array of story_group objects from bootstrap
+  storyViewer: {
+    open: false,
+    groupIndex: 0,
+    storyIndex: 0,
+    timer: null,
+    mediaEl: null,
+    // pause / resume tracking
+    paused: false,
+    segmentStartedAt: 0,   // Date.now() when current segment timer began
+    segmentDuration: 0,    // total ms for current segment
+    segmentElapsed: 0,     // ms already consumed (accumulated across multiple pauses)
+  },
+};
+
+const els = {};
+
+/* ─── Sound ──────────────────────────────────────────────── */
+const soundState = { enabled: true, unlocked: false, active: new Set(), loops: new Map() };
+const SOUND_IDS = {
+  qrScanSuccess:   'sfx-qr-scan-success',
+  friendAdded:     'sfx-friend-added',
+  messageSend:     'sfx-message-send',
+  messageReceive:  'sfx-message-receive',
+  voiceRecordStart:'sfx-voice-record-start',
+  voiceSend:       'sfx-voice-send',
+  callRingback:    'sfx-call-ringback',
+  callAnswer:      'sfx-call-answer',
+  incomingRingtone:'sfx-incoming-ringtone',
+  reaction:        'sfx-reaction',
+};
+
+function bindSoundUnlock() {
+  const unlock = () => {
+    if (soundState.unlocked) return;
+    soundState.unlocked = true;
+    Object.values(SOUND_IDS).forEach((id) => {
+      const t = document.getElementById(id);
+      if (!t) return;
+      t.muted = true;
+      Promise.resolve(t.play()).catch(() => undefined).finally(() => {
+        t.pause(); t.currentTime = 0; t.muted = false;
+      });
+    });
+  };
+  ['pointerdown', 'keydown', 'touchstart'].forEach((ev) =>
+    document.addEventListener(ev, unlock, { once: true, capture: true }));
+}
+
+function playSound(name, { loop = false, volume = 1 } = {}) {
+  if (!soundState.enabled) return null;
+  const t = document.getElementById(SOUND_IDS[name]);
+  if (!t) return null;
+  if (loop) stopSound(name);
+  const audio = t.cloneNode(true);
+  audio.id = ''; audio.loop = loop; audio.volume = volume;
+  audio.currentTime = 0; audio.muted = false;
+  soundState.active.add(audio);
+  audio.addEventListener('ended', () => soundState.active.delete(audio), { once: true });
+  Promise.resolve(audio.play()).catch(() => soundState.active.delete(audio));
+  if (loop) soundState.loops.set(name, audio);
+  return audio;
+}
+
+function stopSound(name) {
+  const audio = soundState.loops.get(name);
+  if (!audio) return;
+  audio.pause(); audio.currentTime = 0;
+  soundState.loops.delete(name); soundState.active.delete(audio);
+}
+function stopAllCallSounds() { stopSound('callRingback'); stopSound('incomingRingtone'); }
+
+/* ─── Web Notifications ──────────────────────────────────── */
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    await Notification.requestPermission().catch(() => {});
+  }
+}
+
+function showWebNotification(title, body, icon) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  if (!document.hidden) return;   // only when tab is hidden
+  try {
+    const n = new Notification(title, {
+      body,
+      icon: icon || undefined,
+      silent: true,
+      tag: 'expressmessenger-msg',   // deduplicate: replaces previous notification
+      renotify: true,
+    });
+    n.onclick = (e) => {
+      e.preventDefault();           // prevent browser from opening a new tab
+      window.focus();
+      n.close();
+    };
+    setTimeout(() => n.close(), 5000);
+  } catch { /* ignore */ }
+}
+
+/* ─── Boot ───────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  cacheElements();
+  bindGlobalEvents();
+  bindSoundUnlock();
+  initializeApp();
+});
+
+window.addEventListener('beforeunload', () => {
+  stopScanner();
+  closeNavQrScanner();
+  leaveCall({ notify: false }).catch(() => undefined);
+});
+
+function cacheElements() {
+  const q = (id) => document.getElementById(id);
+  Object.assign(els, {
+    authScreen:         q('auth-screen'),
+    totpScreen:         q('totp-screen'),
+    appShell:           q('app-shell'),
+    toastRoot:          q('toast-root'),
+    authTabs:           q('auth-tabs'),
+    loginForm:          q('login-form'),
+    registerForm:       q('register-form'),
+    resetForm:          q('reset-form'),
+    totpGenerate:       q('totp-generate'),
+    totpQr:             q('totp-qr'),
+    recoveryBox:        q('recovery-box'),
+    recoveryList:       q('recovery-list'),
+    totpConfirmForm:    q('totp-confirm-form'),
+    meUsername:         q('me-username'),
+    meAvatarLetter:     q('me-avatar-letter'),
+    meAvatarImg:        q('me-avatar-img'),
+    myUUID:             q('my-uuid'),
+    myQr:               q('my-qr'),
+    avatarInput:        q('avatar-input'),
+    avatarFilename:     q('avatar-filename'),
+    panelTitle:         q('panel-title'),
+    actionAddFriend:    q('action-add-friend'),
+    actionCreateGroup:  q('action-create-group'),
+    panelChats:         q('panel-chats'),
+    panelFriends:       q('panel-friends'),
+    panelGroups:        q('panel-groups'),
+    panelSettings:      q('panel-settings'),
+    conversationList:   q('conversation-list'),
+    friendList:         q('friend-list'),
+    groupList:          q('group-list'),
+    listPane:           q('list-pane'),
+    chatPane:           q('chat-pane'),
+    chatEmpty:          q('chat-empty'),
+    chatActive:         q('chat-active'),
+    backToList:         q('back-to-list'),
+    chatAvatarLetter:   q('chat-avatar-letter'),
+    chatAvatarImg:      q('chat-avatar-img'),
+    conversationTitle:  q('conversation-title'),
+    conversationSubtitle: q('conversation-subtitle'),
+    shareGroupLink:     q('share-group-link'),
+    openAddMember:      q('open-add-member'),
+    leaveConversation:  q('leave-conversation'),
+    voiceCall:          q('voice-call'),
+    videoCall:          q('video-call'),
+    typingBar:          q('typing-bar'),
+    typingText:         q('typing-text'),
+    messageList:        q('message-list'),
+    composerForm:       q('composer-form'),
+    composerInput:      q('composer-input'),
+    attachmentInput:    q('attachment-input'),
+    uploadFile:         q('upload-file'),
+    recordVoice:        q('record-voice'),
+    // route overlay
+    routeOverlay:       q('route-overlay'),
+    routeTitle:         q('route-title'),
+    routeDescription:   q('route-description'),
+    routePrimaryAction: q('route-primary-action'),
+    routeSecondaryAction: q('route-secondary-action'),
+    // incoming call overlay
+    incomingCallOverlay:  q('incoming-call-overlay'),
+    incomingCallerAvatar: q('incoming-caller-avatar'),
+    incomingCallerName:   q('incoming-caller-name'),
+    incomingCallModeLabel:q('incoming-call-mode-label'),
+    declineCallBtn:       q('decline-call-btn'),
+    acceptCallBtn:        q('accept-call-btn'),
+    // in-call overlay
+    callOverlay:        q('call-overlay'),
+    callModeLabel:      q('call-mode-label'),
+    callTitle:          q('call-title'),
+    callDuration:       q('call-duration'),
+    toggleMute:         q('toggle-mute'),
+    muteIconOn:         q('mute-icon-on'),
+    muteIconOff:        q('mute-icon-off'),
+    flipCamera:         q('flip-camera'),
+    toggleScreenShare:  q('toggle-screen-share'),
+    leaveCall:          q('leave-call'),
+    localVideo:         q('local-video'),
+    remoteVideos:       q('remote-videos'),
+    callVoiceGrid:      q('call-voice-grid'),
+    callVideoGrid:      q('call-video-grid'),
+    groupInfoDialog:    q('group-info-dialog'),
+    groupInfoBody:      q('group-info-body'),
+    // dialogs
+    friendDialog:       q('friend-dialog'),
+    friendDialogUuid:   q('friend-dialog-uuid'),
+    friendDialogQr:     q('friend-dialog-qr'),
+    addFriendForm:      q('add-friend-form'),
+    toggleScan:         q('toggle-scan'),
+    scannerVideo:       q('scanner-video'),
+    scanImageForm:      q('scan-image-form'),
+    scanImageFilename:  q('scan-image-filename'),
+    groupDialog:        q('group-dialog'),
+    groupCreateForm:    q('group-create-form'),
+    addMemberDialog:    q('add-member-dialog'),
+    addMemberList:      q('add-member-list'),
+    passwordChangeForm: q('password-change-form'),
+    logoutButton:       q('logout-button'),
+    // Stories
+    storyBar:           q('story-bar'),
+    storyViewer:        q('story-viewer'),
+    svProgressRow:      q('sv-progress-row'),
+    svAvatar:           q('sv-avatar'),
+    svUsername:         q('sv-username'),
+    svTime:             q('sv-time'),
+    svMediaWrap:        q('sv-media-wrap'),
+    svRipple:           q('sv-ripple'),
+    svCaption:          q('sv-caption'),
+    svReplyForm:        q('sv-reply-form'),
+    svReplyInput:       q('sv-reply-input'),
+    svClose:            q('sv-close'),
+    storyFileInput:     q('story-file-input'),
+  });
+}
+
+/* ─── App init ───────────────────────────────────────────── */
+async function initializeApp() {
+  switchAuthView('login');
+  try {
+    const session = await api('/api/auth/me');
+    state.me = session.user;
+    if (session.requires_totp_setup) { showScreen('totp'); return; }
+    await enterApp();
+  } catch {
+    showScreen('auth');
+  }
+}
+
+async function enterApp() {
+  showScreen('app');
+  await loadBootstrap({ preserveConversation: true });
+  connectSocket();
+  await handleRouteOverlay();
+  requestNotificationPermission();
+}
+
+async function loadBootstrap({ preserveConversation = true } = {}) {
+  // Snapshot the currently-viewed story identity before we replace state.stories
+  let viewerAnchor = null;
+  if (state.storyViewer.open) {
+    const sg = state.stories[state.storyViewer.groupIndex];
+    const st = sg?.stories[state.storyViewer.storyIndex];
+    if (sg && st) viewerAnchor = { userId: sg.user_id, storyId: st.id };
+  }
+
+  const wantedId = preserveConversation ? state.currentConversation?.id : null;
+  const response = await api('/api/bootstrap');
+  state.me            = response.user;
+  state.friends       = response.friends || [];
+  state.conversations = response.conversations || [];
+  state.iceServers    = response.ice_servers || [];
+  state.myUUID        = response.my_uuid;
+  state.myAddLink     = response.my_add_link;
+  state.stories       = response.story_groups || [];
+  renderBootstrapData();
+  if (wantedId && state.conversations.some((c) => c.id === wantedId)) {
+    await openConversation(wantedId, { skipRefresh: true });
+  }
+
+  // Re-anchor story viewer to the same story after the array is rebuilt
+  if (state.storyViewer.open && viewerAnchor) {
+    const newGi = state.stories.findIndex((g) => g.user_id === viewerAnchor.userId);
+    if (newGi === -1) {
+      closeStoryViewer();
+    } else {
+      const newSi = state.stories[newGi].stories.findIndex((s) => s.id === viewerAnchor.storyId);
+      state.storyViewer.groupIndex = newGi;
+      state.storyViewer.storyIndex = newSi >= 0 ? newSi : 0;
+      renderStoryViewerContent();
+    }
+  }
+}
+
+function renderBootstrapData() {
+  const letter = (state.me?.username || '?')[0].toUpperCase();
+  if (els.meUsername)      els.meUsername.textContent = `@${state.me.username}`;
+  // Avatar
+  if (state.me?.avatar_url) {
+    if (els.meAvatarImg)    { els.meAvatarImg.src = state.me.avatar_url; els.meAvatarImg.classList.remove('hidden'); }
+    if (els.meAvatarLetter) els.meAvatarLetter.classList.add('hidden');
+  } else {
+    if (els.meAvatarLetter) { els.meAvatarLetter.textContent = letter; els.meAvatarLetter.classList.remove('hidden'); }
+    if (els.meAvatarImg)    els.meAvatarImg.classList.add('hidden');
+  }
+  if (els.myUUID)           els.myUUID.textContent = state.myUUID;
+  if (els.myQr)             els.myQr.src = '/api/users/me/qr.png';
+  if (els.friendDialogUuid) els.friendDialogUuid.textContent = state.myUUID;
+  if (els.friendDialogQr)   els.friendDialogQr.src = '/api/users/me/qr.png';
+  renderStoryBar();
+  renderConversationList();
+  renderFriendList();
+  renderGroupList();
+}
+
+/* ─── Screen helpers ─────────────────────────────────────── */
+function showScreen(name) {
+  els.authScreen.classList.toggle('hidden', name !== 'auth');
+  els.totpScreen.classList.toggle('hidden', name !== 'totp');
+  els.appShell.classList.toggle('hidden', name !== 'app');
+}
+
+function switchAuthView(view) {
+  document.querySelectorAll('[data-auth-view]').forEach((btn) =>
+    btn.classList.toggle('is-active', btn.dataset.authView === view));
+  els.loginForm.classList.toggle('hidden', view !== 'login');
+  els.registerForm.classList.toggle('hidden', view !== 'register');
+  els.resetForm.classList.toggle('hidden', view !== 'reset');
+}
+
+/* ─── Panel switching ────────────────────────────────────── */
+const PANEL_TITLES = { chats: 'Chats', friends: 'Friends', groups: 'Groups', settings: 'Settings' };
+
+function switchPanel(panel) {
+  state.currentPanel = panel;
+  document.querySelectorAll('.nav-item').forEach((btn) =>
+    btn.classList.toggle('active', btn.dataset.panel === panel));
+  ['chats','friends','groups','settings'].forEach((p) => {
+    const el = document.getElementById(`panel-${p}`);
+    if (el) el.classList.toggle('active', p === panel);
+  });
+  if (els.panelTitle) els.panelTitle.textContent = PANEL_TITLES[panel] || '';
+  els.actionAddFriend?.classList.toggle('hidden', panel !== 'friends');
+  els.actionCreateGroup?.classList.toggle('hidden', panel !== 'groups');
+}
+
+/* ─── Global events ──────────────────────────────────────── */
+function bindGlobalEvents() {
+  els.authTabs?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-auth-view]');
+    if (btn) switchAuthView(btn.dataset.authView);
+  });
+  els.loginForm?.addEventListener('submit',    handleLogin);
+  els.registerForm?.addEventListener('submit', handleRegister);
+  els.resetForm?.addEventListener('submit',    handleResetPassword);
+  els.totpGenerate?.addEventListener('click',  handleGenerateTotp);
+  els.totpConfirmForm?.addEventListener('submit', handleConfirmTotp);
+
+  document.querySelectorAll('.nav-item[data-panel]').forEach((btn) =>
+    btn.addEventListener('click', () => switchPanel(btn.dataset.panel)));
+  document.getElementById('nav-qr-scan')?.addEventListener('click', openNavQrScanner);
+  document.getElementById('nav-qr-close')?.addEventListener('click', closeNavQrScanner);
+  els.actionAddFriend?.addEventListener('click',   () => openDialog(els.friendDialog));
+  els.actionCreateGroup?.addEventListener('click', () => openDialog(els.groupDialog));
+
+  // Chat pane
+  els.backToList?.addEventListener('click', closeChatPane);
+  els.composerForm?.addEventListener('submit', handleSendMessage);
+  els.composerInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); els.composerForm.dispatchEvent(new Event('submit')); }
+  });
+  els.composerInput?.addEventListener('input', () => { autoResizeComposer(); handleTypingInput(); });
+  els.uploadFile?.addEventListener('click',  () => els.attachmentInput?.click());
+  els.attachmentInput?.addEventListener('change', handleAttachmentSelected);
+  els.recordVoice?.addEventListener('click', handleVoiceRecordingToggle);
+  els.voiceCall?.addEventListener('click',  () => startCallSafe('voice'));
+  els.videoCall?.addEventListener('click',  () => startCallSafe('video'));
+  els.shareGroupLink?.addEventListener('click', handleShareGroupLink);
+  els.openAddMember?.addEventListener('click', openAddMemberDialog);
+  els.leaveConversation?.addEventListener('click', handleLeaveConversation);
+  els.messageList?.addEventListener('click', handleMessageListClick);
+  els.messageList?.addEventListener('dblclick', handleMessageDoubleTap);
+  els.messageList?.addEventListener('touchend', handleMessageTouchEnd, { passive: false });
+
+  // Avatar upload
+  els.avatarInput?.addEventListener('change', handleAvatarUpload);
+
+  // Dialogs
+  els.addFriendForm?.addEventListener('submit',  handleAddFriend);
+  els.scanImageForm?.addEventListener('submit',  handleScanImage);
+  els.scanImageForm?.querySelector('input[type=file]')?.addEventListener('change', (e) => {
+    if (els.scanImageFilename) els.scanImageFilename.textContent = e.target.files[0]?.name || 'Upload QR image…';
+  });
+  els.toggleScan?.addEventListener('click', handleToggleScanner);
+  els.groupCreateForm?.addEventListener('submit', handleCreateGroup);
+  els.passwordChangeForm?.addEventListener('submit', handlePasswordChange);
+  els.logoutButton?.addEventListener('click', handleLogout);
+  // Story file input and viewer controls
+  els.storyFileInput?.addEventListener('change', handleStoryFileSelected);
+  els.svClose?.addEventListener('click', closeStoryViewer);
+  els.svReplyForm?.addEventListener('submit', handleStoryReply);
+  setupStoryViewerInteractions();
+
+  // Route overlay
+  els.routePrimaryAction?.addEventListener('click', async () => {
+    if (typeof state.routeAction === 'function') await state.routeAction();
+  });
+  els.routeSecondaryAction?.addEventListener('click', hideRouteOverlay);
+
+  // Incoming call buttons
+  els.acceptCallBtn?.addEventListener('click', handleAcceptCall);
+  els.declineCallBtn?.addEventListener('click', handleDeclineCall);
+
+  // In-call controls
+  els.leaveCall?.addEventListener('click',         () => leaveCall({ notify: true }));
+  els.toggleMute?.addEventListener('click',        handleToggleMute);
+  els.flipCamera?.addEventListener('click',        handleFlipCamera);
+  els.toggleScreenShare?.addEventListener('click', handleToggleScreenShare);
+
+  // Group info: click on conversation title
+  els.conversationTitle?.addEventListener('click', () => {
+    const c = state.currentConversation;
+    if (c?.kind === 'group') openGroupInfoDialog();
+  });
+
+  // Close dialog buttons
+  document.querySelectorAll('[data-close-dialog]').forEach((btn) => {
+    btn.addEventListener('click', () => document.getElementById(btn.dataset.closeDialog)?.close());
+  });
+}
+
+/* ─── Auth handlers ──────────────────────────────────────── */
+async function handleLogin(e) {
+  e.preventDefault();
+  const payload = Object.fromEntries(new FormData(e.currentTarget));
+  try {
+    const response = await api('/api/auth/login', { method: 'POST', body: payload });
+    state.me = response.user;
+    if (response.requires_totp_setup) { showScreen('totp'); toast('Set up Google Authenticator to finish.', 'info'); return; }
+    await enterApp();
+    toast('Signed in.', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  const payload = Object.fromEntries(new FormData(e.currentTarget));
+  try {
+    const response = await api('/api/auth/register', { method: 'POST', body: payload });
+    state.me = response.user;
+    showScreen('totp');
+    toast('Account created. Set up Google Authenticator.', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function handleResetPassword(e) {
+  e.preventDefault();
+  const payload = Object.fromEntries(new FormData(e.currentTarget));
+  try {
+    const response = await api('/api/auth/password-reset', { method: 'POST', body: payload });
+    state.me = response.user;
+    await enterApp();
+    toast('Password reset. You are signed in.', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function handleGenerateTotp() {
+  try {
+    const response = await api('/api/auth/totp/setup', { method: 'POST' });
+    els.totpQr.src = response.qr_code;
+    els.recoveryList.innerHTML = response.recovery_codes.map((c) => `<li>${escapeHtml(c)}</li>`).join('');
+    els.recoveryBox.classList.remove('hidden');
+    toast('Scan the QR code and save recovery codes.', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function handleConfirmTotp(e) {
+  e.preventDefault();
+  const payload = Object.fromEntries(new FormData(e.currentTarget));
+  try {
+    const response = await api('/api/auth/totp/confirm', { method: 'POST', body: payload });
+    state.me = response.user;
+    await enterApp();
+    toast('Google Authenticator setup complete.', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ─── Avatar upload ──────────────────────────────────────── */
+async function handleAvatarUpload() {
+  const [file] = els.avatarInput.files || [];
+  if (!file) return;
+  if (els.avatarFilename) els.avatarFilename.textContent = file.name;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const response = await api('/api/users/me/avatar', { method: 'POST', body: fd });
+    state.me = { ...state.me, avatar_url: response.avatar_url };
+    if (els.meAvatarImg) { els.meAvatarImg.src = response.avatar_url + '?t=' + Date.now(); els.meAvatarImg.classList.remove('hidden'); }
+    if (els.meAvatarLetter) els.meAvatarLetter.classList.add('hidden');
+    toast('Profile picture updated.', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+  els.avatarInput.value = '';
+}
+
+/* ─── Conversation rendering ─────────────────────────────── */
+function updatePresenceUI(userId) {
+  // Update dots in conversation/friend lists
+  document.querySelectorAll(`[data-partner-id="${userId}"]`).forEach((wrap) => {
+    let dot = wrap.querySelector('.online-dot');
+    if (state.onlineUsers.has(userId)) {
+      if (!dot) { dot = document.createElement('span'); dot.className = 'online-dot'; wrap.appendChild(dot); }
+    } else {
+      dot?.remove();
+    }
+  });
+  // Update friend list last-seen text
+  document.querySelectorAll(`[data-friend-id="${userId}"] .chat-item-preview`).forEach((el) => {
+    const friend = state.friends.find((f) => f.id === userId);
+    if (!friend) return;
+    el.textContent = state.onlineUsers.has(userId)
+      ? 'Online'
+      : (friend.last_seen_at ? `Last seen ${formatRelativeTime(friend.last_seen_at)}` : '');
+  });
+  // Update chat header subtitle if this is the current conversation partner
+  const c = state.currentConversation;
+  if (c && c.kind === 'private' && c.partner?.id === userId && els.conversationSubtitle) {
+    if (state.onlineUsers.has(userId)) {
+      els.conversationSubtitle.textContent = 'Online';
+      els.conversationSubtitle.classList.add('online-text');
+    } else {
+      els.conversationSubtitle.classList.remove('online-text');
+      els.conversationSubtitle.textContent = c.partner?.last_seen_at
+        ? `Last seen ${formatRelativeTime(c.partner.last_seen_at)}`
+        : `@${c.partner?.username || ''}`;
+    }
+  }
+}
+
+function renderConversationList() {
+  if (!els.conversationList) return;
+  const privates = state.conversations.filter((c) => c.kind === 'private');
+  if (!privates.length) {
+    els.conversationList.innerHTML = emptyState('No chats yet', 'Add a friend to start messaging.');
+    return;
+  }
+  els.conversationList.innerHTML = privates.map((c) => conversationItem(c)).join('');
+  els.conversationList.querySelectorAll('.chat-item').forEach((btn) =>
+    btn.addEventListener('click', () => openConversation(btn.dataset.id)));
+}
+
+function renderFriendList() {
+  if (!els.friendList) return;
+  if (!state.friends.length) {
+    els.friendList.innerHTML = emptyState('No friends yet', 'Use the + button to add friends.');
+    return;
+  }
+  els.friendList.innerHTML = state.friends.map((f) => {
+    const isOnline = state.onlineUsers.has(f.id);
+    const onlineDot = isOnline ? '<span class="online-dot"></span>' : '';
+    const avatarHtml = f.avatar_url
+      ? `<div class="avatar avatar-md avatar-wrap" data-partner-id="${f.id}"><img src="${escapeHtml(f.avatar_url)}" class="avatar-img" alt="">${onlineDot}</div>`
+      : `<div class="avatar avatar-md avatar-wrap" data-partner-id="${f.id}">${escapeHtml(f.username[0].toUpperCase())}${onlineDot}</div>`;
+    const lastSeen = isOnline ? 'Online' : (f.last_seen_at ? `Last seen ${formatRelativeTime(f.last_seen_at)}` : '');
+    return `
+    <div class="chat-item-wrap" data-friend-id="${f.id}">
+      <button class="chat-item" data-id="${f.id}" type="button">
+        ${avatarHtml}
+        <div class="chat-item-info">
+          <div class="chat-item-name">${escapeHtml(f.username)}</div>
+          <div class="chat-item-preview">${escapeHtml(lastSeen || f.id.slice(0,16) + '…')}</div>
+        </div>
+      </button>
+      <div class="friend-item-actions">
+        <button class="btn-secondary" style="font-size:.75rem;padding:.3rem .7rem;width:auto;" data-chat-friend="${f.id}" type="button">Message</button>
+        <button class="btn-danger" style="font-size:.75rem;padding:.3rem .7rem;width:auto;" data-unfriend="${f.id}" type="button">Remove</button>
+      </div>
+    </div>`;
+  }).join('');
+  els.friendList.querySelectorAll('.chat-item').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const friend = state.friends.find((f) => f.id === btn.dataset.id);
+      if (friend) openFriendConversation(friend);
+    }));
+  els.friendList.querySelectorAll('[data-chat-friend]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const friend = state.friends.find((f) => f.id === btn.dataset.chatFriend);
+      if (friend) openFriendConversation(friend);
+    }));
+  els.friendList.querySelectorAll('[data-unfriend]').forEach((btn) =>
+    btn.addEventListener('click', () => handleUnfriend(btn.dataset.unfriend)));
+}
+
+function renderGroupList() {
+  if (!els.groupList) return;
+  const groups = state.conversations.filter((c) => c.kind === 'group');
+  if (!groups.length) {
+    els.groupList.innerHTML = emptyState('No groups yet', 'Use the + button to create a group.');
+    return;
+  }
+  els.groupList.innerHTML = groups.map((g) => conversationItem(g)).join('');
+  els.groupList.querySelectorAll('.chat-item').forEach((btn) =>
+    btn.addEventListener('click', () => openConversation(btn.dataset.id)));
+}
+
+function conversationItem(c) {
+  const isActive = state.currentConversation?.id === c.id;
+  const avatarSrc = c.partner?.avatar_url;
+  const letter = (c.title || '?')[0].toUpperCase();
+  const time   = c.last_message_at ? formatTime(c.last_message_at) : '';
+  const preview = escapeHtml(c.last_message_preview || (c.kind === 'group' ? `${c.member_count} members` : ''));
+  const isOnline = c.kind === 'private' && c.partner?.id && state.onlineUsers.has(c.partner.id);
+  const onlineDot = isOnline ? '<span class="online-dot"></span>' : '';
+  const groupIconSrc = c.kind === 'group' && c.icon_url ? c.icon_url : null;
+  const resolvedAvatarSrc = avatarSrc || groupIconSrc;
+  const avatarHtml = resolvedAvatarSrc
+    ? `<div class="avatar avatar-md avatar-wrap" data-partner-id="${c.partner?.id || ''}"><img src="${escapeHtml(resolvedAvatarSrc)}" class="avatar-img" alt="">${onlineDot}</div>`
+    : `<div class="avatar avatar-md avatar-wrap" data-partner-id="${c.partner?.id || ''}">${escapeHtml(letter)}${onlineDot}</div>`;
+  return `
+    <button class="chat-item${isActive ? ' active' : ''}" data-id="${c.id}" type="button">
+      ${avatarHtml}
+      <div class="chat-item-info">
+        <div class="chat-item-name">${escapeHtml(c.title)}</div>
+        <div class="chat-item-preview">${preview}</div>
+      </div>
+      <div class="chat-item-meta">
+        ${time ? `<span class="chat-item-time">${time}</span>` : ''}
+      </div>
+    </button>`;
+}
+
+function emptyState(title, sub) {
+  return `<div class="empty-state"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(sub)}</span></div>`;
+}
+
+/* ─── Open / close chat ──────────────────────────────────── */
+async function openConversation(conversationId, { skipRefresh = false } = {}) {
+  const conversation = state.conversations.find((c) => c.id === conversationId);
+  if (!conversation) return;
+
+  if (state.currentConversation?.id && state.socket && state.currentConversation.id !== conversationId) {
+    state.socket.emit('conversation:leave', { conversation_id: state.currentConversation.id });
+    emitTypingStop(state.currentConversation.id);
+  }
+  state.currentConversation = conversation;
+  state.typingUsers[conversationId] = state.typingUsers[conversationId] || {};
+  renderConversationHeader();
+  renderConversationList();
+  renderGroupList();
+  showChatPane();
+
+  try {
+    const response = await api(`/api/conversations/${conversation.id}/messages`);
+    state.currentMessages = response.messages || [];
+    renderMessages();
+    scrollToBottom();
+    if (state.socket) state.socket.emit('conversation:join', { conversation_id: conversation.id });
+    api(`/api/conversations/${conversation.id}/read`, { method: 'POST' }).catch(() => undefined);
+    if (!skipRefresh) scheduleBootstrapRefresh(350);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function openFriendConversation(friend) {
+  if (friend.conversation_id) { await openConversation(friend.conversation_id); return; }
+  try {
+    const response = await api(`/api/conversations/private/${friend.id}`, { method: 'POST' });
+    await loadBootstrap({ preserveConversation: false });
+    await openConversation(response.conversation.id);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function showChatPane() {
+  els.appShell.classList.add('chat-open');
+  els.chatEmpty.classList.add('hidden');
+  els.chatActive.classList.remove('hidden');
+}
+
+function closeChatPane() {
+  emitTypingStop(state.currentConversation?.id);
+  els.appShell.classList.remove('chat-open');
+  state.currentConversation = null;
+  renderConversationList();
+  renderGroupList();
+}
+
+function renderConversationHeader() {
+  const c = state.currentConversation;
+  if (!c) return;
+  const avatarSrc = c.partner?.avatar_url;
+  const letter = (c.title || '?')[0].toUpperCase();
+
+  // Avatar
+  const chatAvatarWrap = document.getElementById('chat-avatar-wrap');
+  if (chatAvatarWrap) {
+    chatAvatarWrap.dataset.partnerId = c.partner?.id || '';
+    // Sync online dot
+    let dot = chatAvatarWrap.querySelector('.online-dot');
+    if (c.kind === 'private' && c.partner?.id && state.onlineUsers.has(c.partner.id)) {
+      if (!dot) { dot = document.createElement('span'); dot.className = 'online-dot'; chatAvatarWrap.appendChild(dot); }
+    } else {
+      dot?.remove();
+    }
+  }
+  const displayAvatarSrc = avatarSrc || (c.kind === 'group' && c.icon_url ? c.icon_url : null);
+  if (displayAvatarSrc) {
+    if (els.chatAvatarImg) { els.chatAvatarImg.src = displayAvatarSrc; els.chatAvatarImg.classList.remove('hidden'); }
+    if (els.chatAvatarLetter) els.chatAvatarLetter.classList.add('hidden');
+  } else {
+    if (els.chatAvatarLetter) { els.chatAvatarLetter.textContent = letter; els.chatAvatarLetter.classList.remove('hidden'); }
+    if (els.chatAvatarImg) els.chatAvatarImg.classList.add('hidden');
+  }
+
+  if (els.conversationTitle) {
+    els.conversationTitle.textContent = c.title;
+    els.conversationTitle.classList.toggle('clickable-title', c.kind === 'group');
+  }
+
+  // Subtitle: online/last seen for private, member count for group
+  if (els.conversationSubtitle) {
+    if (c.kind === 'group') {
+      els.conversationSubtitle.textContent = `${c.member_count} members`;
+    } else if (c.partner?.id && state.onlineUsers.has(c.partner.id)) {
+      els.conversationSubtitle.textContent = 'Online';
+      els.conversationSubtitle.classList.add('online-text');
+    } else if (c.partner?.last_seen_at) {
+      els.conversationSubtitle.textContent = `Last seen ${formatRelativeTime(c.partner.last_seen_at)}`;
+      els.conversationSubtitle.classList.remove('online-text');
+    } else {
+      els.conversationSubtitle.textContent = `@${c.partner?.username || ''}`;
+      els.conversationSubtitle.classList.remove('online-text');
+    }
+  }
+
+  els.shareGroupLink?.classList.toggle('hidden', c.kind !== 'group');
+  els.openAddMember?.classList.toggle('hidden', c.kind !== 'group');
+}
+
+/* ─── Typing indicator ───────────────────────────────────── */
+function handleTypingInput() {
+  if (!state.currentConversation || !state.socket) return;
+  const convId = state.currentConversation.id;
+  if (!state.typingActive) {
+    state.typingActive = true;
+    state.socket.emit('typing:start', { conversation_id: convId });
+  }
+  clearTimeout(state.typingTimer);
+  state.typingTimer = setTimeout(() => {
+    state.typingActive = false;
+    emitTypingStop(convId);
+  }, 3000);
+}
+
+function emitTypingStop(conversationId) {
+  if (!conversationId || !state.socket) return;
+  state.typingActive = false;
+  clearTimeout(state.typingTimer);
+  state.socket.emit('typing:stop', { conversation_id: conversationId });
+}
+
+function updateTypingIndicator() {
+  const convId = state.currentConversation?.id;
+  if (!convId || !els.typingBar || !els.typingText) return;
+  const users = Object.values(state.typingUsers[convId] || {});
+  if (!users.length) {
+    els.typingBar.classList.add('hidden');
+    return;
+  }
+  const names = users.map((u) => u.username).join(', ');
+  const suffix = users.length === 1 ? ' is typing…' : ' are typing…';
+  els.typingText.textContent = names + suffix;
+  els.typingBar.classList.remove('hidden');
+}
+
+
+/* ─── Group read-status helper ───────────────────────────── */
+function groupReadStatus(msg, conversation) {
+  const membersReadAt = conversation.members_read_at || {};
+  const myId = state.me?.id;
+  const msgTime = new Date(msg.created_at);
+  const otherIds = Object.keys(membersReadAt).filter((id) => id !== myId);
+  if (!otherIds.length) return '<span class="read-status delivered" title="Sent">✓</span>';
+  const allRead = otherIds.every((id) => {
+    const t = membersReadAt[id];
+    return t && new Date(t) >= msgTime;
+  });
+  if (allRead) return '<span class="read-status read" title="Read by all">✓✓</span>';
+  const allDelivered = otherIds.every((id) => membersReadAt[id] != null);
+  if (allDelivered) return '<span class="read-status delivered" title="Delivered">✓✓</span>';
+  return '<span class="read-status delivered" title="Sent">✓</span>';
+}
+
+/* ─── Messages ───────────────────────────────────────────── */
+function renderMessages() {
+  if (!state.currentConversation || !els.messageList) return;
+
+  if (!state.currentMessages.length) {
+    els.messageList.innerHTML = '<div class="empty-state"><span>No messages yet</span></div>';
+    return;
+  }
+
+  const partnerLastReadAt = state.currentConversation.partner_last_read_at
+    ? new Date(state.currentConversation.partner_last_read_at)
+    : null;
+
+  const groups = [];
+  for (const msg of state.currentMessages) {
+    const mine = msg.sender?.id === state.me?.id;
+    const last = groups[groups.length - 1];
+    if (last && last.mine === mine && last.senderId === msg.sender?.id) {
+      last.messages.push(msg);
+    } else {
+      groups.push({ mine, senderId: msg.sender?.id, senderName: msg.sender?.username || 'Unknown',
+                    senderAvatar: msg.sender?.avatar_url, messages: [msg] });
+    }
+  }
+
+  els.messageList.innerHTML = groups.map((g) => {
+    const avatarHtml = g.mine ? '' : (
+      g.senderAvatar
+        ? `<div class="avatar avatar-xs msg-avatar"><img src="${escapeHtml(g.senderAvatar)}" class="avatar-img" alt=""></div>`
+        : `<div class="avatar avatar-xs msg-avatar">${escapeHtml(g.senderName[0].toUpperCase())}</div>`
+    );
+    return `
+    <div class="msg-group ${g.mine ? 'mine' : 'theirs'}">
+      ${!g.mine ? `<div class="msg-group-header">${avatarHtml}<span class="msg-sender">${escapeHtml(g.senderName)}</span></div>` : ''}
+      ${g.messages.map((msg) => {
+        if (msg.deleted_at) {
+          return `<div class="msg-bubble msg-deleted" data-message-id="${msg.id}"><span class="deleted-text">🚫 Message deleted</span></div>
+                  <div class="msg-meta"><span>${formatTime(msg.created_at)}</span></div>`;
+        }
+        // Read status for my messages
+        let readStatus = '';
+        if (g.mine && state.currentConversation.kind === 'private') {
+          const msgTime = new Date(msg.created_at);
+          if (partnerLastReadAt && msgTime <= partnerLastReadAt) {
+            readStatus = '<span class="read-status read" title="Read">✓✓</span>';
+          } else {
+            readStatus = '<span class="read-status delivered" title="Delivered">✓✓</span>';
+          }
+        } else if (g.mine && state.currentConversation.kind === 'group') {
+          readStatus = groupReadStatus(msg, state.currentConversation);
+        }
+        return `
+          <div class="msg-bubble${(msg.extra?.hearts?.length) ? ' has-reaction' : ''}" data-message-id="${msg.id}">
+            ${msg.body ? `<span>${escapeHtml(msg.body)}</span>` : ''}
+            ${renderAttachments(msg)}
+            ${renderReactions(msg)}
+          </div>
+          <div class="msg-meta">
+            <span>${formatTime(msg.created_at)}${msg.edited_at ? ' · edited' : ''}</span>
+            ${readStatus}
+            ${g.mine && msg.message_type === 'text' && !msg.deleted_at
+              ? `<button class="msg-edit-btn" data-edit-message="${msg.id}">Edit</button>`
+              : ''}
+            ${g.mine && !msg.deleted_at
+              ? `<button class="msg-delete-btn" data-delete-message="${msg.id}">Delete</button>`
+              : ''}
+          </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+}
+
+function renderReactions(msg) {
+  const hearts = msg.extra?.hearts;
+  if (!hearts || hearts.length === 0) return '';
+  const isMine = hearts.includes(state.me?.id);
+  let inner = '';
+  if (hearts.length < 3) {
+    inner = hearts.map((uid) => {
+      const u = uid === state.me?.id ? state.me : state.friends?.find(f => f.id === uid);
+      return u?.avatar_url
+        ? `<img class="reaction-avatar" src="${escapeHtml(u.avatar_url)}" alt="">`
+        : `<span class="reaction-avatar reaction-avatar-letter">${escapeHtml((u?.username || '?')[0].toUpperCase())}</span>`;
+    }).join('');
+  } else {
+    inner = `<span class="reaction-count">${hearts.length}</span>`;
+  }
+  return `<button class="msg-reaction-pill${isMine ? ' mine' : ''}" data-react-message="${msg.id}" type="button">❤️${inner}</button>`;
+}
+
+function renderAttachments(message) {
+  if (!message.attachments?.length) return '';
+  return message.attachments.map((a) => {
+    if (message.message_type === 'voice' || a.kind === 'audio') {
+      return renderVoicePlayer(a);
+    }
+    if (a.kind === 'image') {
+      return `<a href="${a.url}" target="_blank" class="attachment-chip"><span>🖼</span><strong>${escapeHtml(a.name)}</strong></a>`;
+    }
+    return `<a href="${a.url}?download=1" class="attachment-chip"><span>📎</span><strong>${escapeHtml(a.name)}</strong></a>`;
+  }).join('');
+}
+
+/* ─── Custom voice message player ───────────────────────── */
+function renderVoicePlayer(attachment) {
+  const id = 'vp-' + attachment.id;
+  // Render after insertion using a timeout so the element exists in DOM
+  setTimeout(() => initVoicePlayer(id, attachment.url), 0);
+  return `
+    <div class="voice-player" id="${id}" data-src="${escapeHtml(attachment.url)}">
+      <button class="vp-play-btn" type="button" aria-label="Play">
+        <svg class="vp-icon-play" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <svg class="vp-icon-pause hidden" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+      </button>
+      <div class="vp-waveform">
+        ${Array.from({length: 24}, (_, i) => {
+          const h = 20 + Math.sin(i * 0.9) * 12 + Math.sin(i * 2.3) * 8;
+          return `<div class="vp-bar" style="height:${Math.round(h)}px"></div>`;
+        }).join('')}
+      </div>
+      <span class="vp-time">0:00</span>
+    </div>`;
+}
+
+function initVoicePlayer(id, url) {
+  const container = document.getElementById(id);
+  if (!container) return;
+  if (container.dataset.initialized) return;
+  container.dataset.initialized = '1';
+
+  const audio = new Audio();
+  const playBtn  = container.querySelector('.vp-play-btn');
+  const iconPlay = container.querySelector('.vp-icon-play');
+  const iconPause= container.querySelector('.vp-icon-pause');
+  const timeEl   = container.querySelector('.vp-time');
+  const bars     = container.querySelectorAll('.vp-bar');
+
+  audio.preload = 'metadata';
+  audio.src = url;
+
+  function fmtTime(s) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2,'0')}`;
+  }
+
+  audio.addEventListener('loadedmetadata', () => {
+    if (isFinite(audio.duration)) timeEl.textContent = fmtTime(audio.duration);
+  });
+
+  audio.addEventListener('timeupdate', () => {
+    if (audio.duration) {
+      const pct = audio.currentTime / audio.duration;
+      timeEl.textContent = fmtTime(audio.currentTime);
+      bars.forEach((b, i) => {
+        b.classList.toggle('vp-bar-played', i / bars.length <= pct);
+      });
+    }
+  });
+
+  audio.addEventListener('ended', () => {
+    iconPlay.classList.remove('hidden');
+    iconPause.classList.add('hidden');
+    timeEl.textContent = isFinite(audio.duration) ? fmtTime(audio.duration) : '0:00';
+    bars.forEach((b) => b.classList.remove('vp-bar-played'));
+  });
+
+  playBtn.addEventListener('click', () => {
+    if (audio.paused) {
+      // Pause all other players first
+      document.querySelectorAll('.voice-player audio').forEach((a) => { if (a !== audio) a.pause(); });
+      audio.play().catch(() => {});
+      iconPlay.classList.add('hidden');
+      iconPause.classList.remove('hidden');
+    } else {
+      audio.pause();
+      iconPlay.classList.remove('hidden');
+      iconPause.classList.add('hidden');
+    }
+  });
+
+  // Waveform click to seek
+  container.querySelector('.vp-waveform')?.addEventListener('click', (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct  = (e.clientX - rect.left) / rect.width;
+    if (isFinite(audio.duration)) audio.currentTime = pct * audio.duration;
+  });
+
+  // Store audio on element for cleanup
+  container._audio = audio;
+}
+
+function upsertMessage(message) {
+  const idx = state.currentMessages.findIndex((m) => m.id === message.id);
+  if (idx >= 0) {
+    state.currentMessages[idx] = message;
+  } else {
+    state.currentMessages.push(message);
+    state.currentMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  }
+  renderMessages();
+}
+
+function scrollToBottom() {
+  requestAnimationFrame(() => {
+    if (els.messageList) els.messageList.scrollTop = els.messageList.scrollHeight;
+  });
+}
+
+/* ─── Heart reaction: double-tap / double-click ──────────── */
+const _lastTap = { element: null, time: 0 };
+
+function _showHeartBurst(bubble) {
+  const rect = bubble.getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'heart-float';
+  el.textContent = '❤️';
+  el.style.left = `${rect.left + rect.width / 2 - 18}px`;
+  el.style.top  = `${rect.top  + rect.height / 2 - 18}px`;
+  document.body.appendChild(el);
+  el.addEventListener('animationend', () => el.remove(), { once: true });
+}
+
+async function toggleHeartReaction(messageId) {
+  try {
+    const res = await api(`/api/messages/${messageId}/react`, {
+      method: 'POST',
+      body: { emoji: '❤️' },
+    });
+    if (res.message) upsertMessage(res.message);
+  } catch (err) {
+    console.error('Reaction failed:', err);
+  }
+}
+
+function handleMessageDoubleTap(e) {
+  const bubble = e.target.closest('.msg-bubble');
+  if (!bubble || bubble.classList.contains('msg-deleted')) return;
+  const messageId = bubble.dataset.messageId;
+  if (!messageId) return;
+  _showHeartBurst(bubble);
+  playSound('reaction');
+  toggleHeartReaction(messageId);
+}
+
+function handleMessageTouchEnd(e) {
+  const bubble = e.target.closest('.msg-bubble');
+  if (!bubble || bubble.classList.contains('msg-deleted')) return;
+  const now = Date.now();
+  if (_lastTap.element === bubble && now - _lastTap.time < 350) {
+    e.preventDefault();
+    _lastTap.element = null;
+    _lastTap.time = 0;
+    const messageId = bubble.dataset.messageId;
+    if (!messageId) return;
+    _showHeartBurst(bubble);
+    playSound('reaction');
+    toggleHeartReaction(messageId);
+  } else {
+    _lastTap.element = bubble;
+    _lastTap.time = now;
+  }
+}
+
+function handleMessageListClick(e) {
+  const editBtn = e.target.closest('[data-edit-message]');
+  if (editBtn) {
+    const msg = state.currentMessages.find((m) => m.id === editBtn.dataset.editMessage);
+    if (!msg) return;
+    const next = window.prompt('Edit message', msg.body || '');
+    if (next == null) return;
+    editMessage(msg.id, next);
+    return;
+  }
+  const delBtn = e.target.closest('[data-delete-message]');
+  if (delBtn) {
+    if (!window.confirm('Delete this message?')) return;
+    deleteMessage(delBtn.dataset.deleteMessage);
+  }
+  const reactBtn = e.target.closest('[data-react-message]');
+  if (reactBtn) {
+    toggleHeartReaction(reactBtn.dataset.reactMessage);
+  }
+}
+
+async function editMessage(messageId, body) {
+  try {
+    const response = await api(`/api/messages/${messageId}`, { method: 'PATCH', body: { body } });
+    upsertMessage(response.message);
+    scheduleBootstrapRefresh(200);
+    toast('Message updated.', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function deleteMessage(messageId) {
+  try {
+    const response = await api(`/api/messages/${messageId}`, { method: 'DELETE' });
+    upsertMessage(response.message);
+    scheduleBootstrapRefresh(200);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ─── Leave / delete conversation ───────────────────────── */
+async function handleLeaveConversation() {
+  const c = state.currentConversation;
+  if (!c) return;
+  const label = c.kind === 'group' ? 'Leave this group?' : 'Delete this chat? All messages will be removed.';
+  if (!window.confirm(label)) return;
+  try {
+    await api(`/api/conversations/${c.id}/membership`, { method: 'DELETE' });
+    closeChatPane();
+    await loadBootstrap({ preserveConversation: false });
+    toast(c.kind === 'group' ? 'Left the group.' : 'Chat deleted.', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ─── Send message ───────────────────────────────────────── */
+async function handleSendMessage(e) {
+  e.preventDefault();
+  if (!state.currentConversation) { toast('Choose a conversation first.', 'error'); return; }
+  const body = els.composerInput.value.trim();
+  if (!body) return;
+  emitTypingStop(state.currentConversation.id);
+  try {
+    const response = await api(`/api/conversations/${state.currentConversation.id}/messages`, {
+      method: 'POST', body: { body },
+    });
+    els.composerInput.value = '';
+    autoResizeComposer();
+    upsertMessage(response.message);
+    scrollToBottom();
+    playSound('messageSend', { volume: 0.35 });
+    scheduleBootstrapRefresh(200);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ─── Attachments / voice ────────────────────────────────── */
+function handleAttachmentSelected() {
+  const [file] = els.attachmentInput.files || [];
+  if (!file || !state.currentConversation) return;
+  uploadAttachment(file).finally(() => { els.attachmentInput.value = ''; });
+}
+
+async function uploadAttachment(file, messageType = 'file') {
+  if (!state.currentConversation) { toast('Choose a conversation first.', 'error'); return; }
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('message_type', messageType);
+  try {
+    const response = await api(`/api/conversations/${state.currentConversation.id}/attachments`, {
+      method: 'POST', body: fd,
+    });
+    upsertMessage(response.message);
+    scrollToBottom();
+    if (messageType === 'voice') playSound('voiceSend', { volume: 0.55 });
+    scheduleBootstrapRefresh(200);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function handleVoiceRecordingToggle() {
+  if (!state.currentConversation) { toast('Choose a conversation first.', 'error'); return; }
+  if (state.voiceRecorder?.state === 'recording') { state.voiceRecorder.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+    toast('Voice recording not supported in this browser.', 'error'); return;
+  }
+  try {
+    state.voiceChunks = [];
+    state.voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(state.voiceStream);
+    state.voiceRecorder = recorder;
+    recorder.addEventListener('dataavailable', (ev) => { if (ev.data.size) state.voiceChunks.push(ev.data); });
+    recorder.addEventListener('stop', async () => {
+      const blob = new Blob(state.voiceChunks, { type: recorder.mimeType || 'audio/webm' });
+      const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
+      stopVoiceStream();
+      els.recordVoice.classList.remove('recording');
+      await uploadAttachment(file, 'voice');
+      state.voiceRecorder = null; state.voiceChunks = [];
+    });
+    recorder.start();
+    els.recordVoice.classList.add('recording');
+    playSound('voiceRecordStart', { volume: 0.55 });
+    toast('Recording… tap mic again to stop.', 'info');
+  } catch (err) {
+    stopVoiceStream(); state.voiceRecorder = null;
+    toast(err.message || 'Microphone access denied.', 'error');
+  }
+}
+
+function stopVoiceStream() {
+  if (state.voiceStream) { state.voiceStream.getTracks().forEach((t) => t.stop()); state.voiceStream = null; }
+}
+
+/* ─── Friends ────────────────────────────────────────────── */
+async function handleAddFriend(e) {
+  e.preventDefault();
+  const payload = Object.fromEntries(new FormData(e.currentTarget));
+  await addFriendFromInput(payload.uuid);
+  e.currentTarget.reset();
+}
+
+async function addFriendFromInput(inputValue, { successSound = null } = {}) {
+  try {
+    const response = await api('/api/friends', { method: 'POST', body: { uuid: inputValue } });
+    await loadBootstrap({ preserveConversation: false });
+    els.friendDialog?.close();
+    toast(`${response.friend.username} added as friend.`, 'success');
+    if (successSound) playSound(successSound, { volume: 0.7 });
+    await openConversation(response.conversation_id);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function handleUnfriend(friendId) {
+  const friend = state.friends.find((f) => f.id === friendId);
+  if (!friend) return;
+  if (!window.confirm(`Remove ${friend.username} from friends?`)) return;
+  try {
+    await api(`/api/friends/${friendId}`, { method: 'DELETE' });
+    if (state.currentConversation?.partner?.id === friendId) closeChatPane();
+    await loadBootstrap({ preserveConversation: true });
+    toast(`${friend.username} removed.`, 'success');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ─── QR scan ────────────────────────────────────────────── */
+async function handleScanImage(e) {
+  e.preventDefault();
+  const fd = new FormData(e.currentTarget);
+  try {
+    const response = await api('/api/friends/scan-image', { method: 'POST', body: fd });
+    await loadBootstrap({ preserveConversation: false });
+    els.friendDialog?.close();
+    toast(`${response.friend.username} added from QR.`, 'success');
+    playSound('qrScanSuccess', { volume: 0.7 });
+    await openConversation(response.conversation_id);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function handleToggleScanner() {
+  if (state.scanner.active) { stopScanner(); return; }
+  if (!('BarcodeDetector' in window)) {
+    toast('Camera QR scan not supported — upload a QR image instead.', 'error'); return;
+  }
+  try {
+    const supported = await BarcodeDetector.getSupportedFormats?.();
+    const opts = Array.isArray(supported) && supported.includes('qr_code') ? { formats: ['qr_code'] } : undefined;
+    state.scanner.detector = new BarcodeDetector(opts);
+    state.scanner.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    els.scannerVideo.srcObject = state.scanner.stream;
+    await els.scannerVideo.play();
+    state.scanner.active = true;
+    els.scannerVideo.classList.remove('hidden');
+    els.toggleScan.innerHTML = els.toggleScan.innerHTML.replace('Scan QR with camera', 'Stop camera');
+    scanFrame();
+  } catch (err) { stopScanner(); toast(err.message || 'Camera unavailable.', 'error'); }
+}
+
+async function scanFrame() {
+  if (!state.scanner.active || !state.scanner.detector) return;
+  try {
+    const results = await state.scanner.detector.detect(els.scannerVideo);
+    if (results.length) {
+      stopScanner();
+      await addFriendFromInput(results[0].rawValue, { successSound: 'qrScanSuccess' });
+      return;
+    }
+  } catch { /* ignore */ }
+  state.scanner.raf = requestAnimationFrame(scanFrame);
+}
+
+function stopScanner() {
+  state.scanner.active = false;
+  if (state.scanner.raf) cancelAnimationFrame(state.scanner.raf);
+  state.scanner.raf = null;
+  if (state.scanner.stream) { state.scanner.stream.getTracks().forEach((t) => t.stop()); state.scanner.stream = null; }
+  if (els.scannerVideo) { els.scannerVideo.srcObject = null; els.scannerVideo.classList.add('hidden'); }
+  if (els.toggleScan) els.toggleScan.innerHTML = els.toggleScan.innerHTML.replace('Stop camera', 'Scan QR with camera');
+}
+
+/* ─── Nav QR Scanner (fullscreen) ───────────────────────── */
+const navQr = { active: false, stream: null, detector: null, raf: null };
+
+async function openNavQrScanner() {
+  if (!('BarcodeDetector' in window)) {
+    toast('QR scanning not supported in this browser.', 'error'); return;
+  }
+  const overlay = document.getElementById('nav-qr-overlay');
+  const video   = document.getElementById('nav-qr-video');
+  const hint    = document.getElementById('nav-qr-hint');
+  if (!overlay || !video) return;
+  try {
+    const supported = await BarcodeDetector.getSupportedFormats?.();
+    const opts = Array.isArray(supported) && supported.includes('qr_code') ? { formats: ['qr_code'] } : undefined;
+    navQr.detector = new BarcodeDetector(opts);
+    navQr.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = navQr.stream;
+    await video.play();
+    navQr.active = true;
+    overlay.classList.remove('hidden');
+    if (hint) hint.textContent = 'Point camera at a friend or group QR code';
+    navQrScanFrame(video, hint);
+  } catch (err) {
+    closeNavQrScanner();
+    toast(err.message || 'Camera unavailable.', 'error');
+  }
+}
+
+async function navQrScanFrame(video, hint) {
+  if (!navQr.active || !navQr.detector) return;
+  try {
+    const results = await navQr.detector.detect(video);
+    if (results.length) {
+      const raw = results[0].rawValue;
+      closeNavQrScanner();
+      playSound('qrScanSuccess', { volume: 0.7 });
+      await handleNavQrResult(raw, hint);
+      return;
+    }
+  } catch { /* ignore */ }
+  navQr.raf = requestAnimationFrame(() => navQrScanFrame(video, hint));
+}
+
+function closeNavQrScanner() {
+  navQr.active = false;
+  if (navQr.raf) { cancelAnimationFrame(navQr.raf); navQr.raf = null; }
+  if (navQr.stream) { navQr.stream.getTracks().forEach((t) => t.stop()); navQr.stream = null; }
+  const video = document.getElementById('nav-qr-video');
+  if (video) { video.srcObject = null; }
+  document.getElementById('nav-qr-overlay')?.classList.add('hidden');
+}
+
+async function handleNavQrResult(raw, hint) {
+  // Auto-detect: group share tokens are URLs like /g/<token>, friend UUIDs are plain UUIDs or add-friend URLs
+  try {
+    // Try to detect group share URL pattern
+    const groupMatch = raw.match(/\/g\/([A-Za-z0-9_-]+)/);
+    if (groupMatch) {
+      const shareToken = groupMatch[1];
+      const response = await api(`/api/groups/join/${shareToken}`, { method: 'POST' });
+      await loadBootstrap({ preserveConversation: false });
+      toast(`Joined group: ${response.conversation?.title || 'Group'}`, 'success');
+      playSound('qrScanSuccess', { volume: 0.7 });
+      if (response.conversation?.id) await openConversation(response.conversation.id);
+      return;
+    }
+    // Otherwise treat as friend QR
+    await addFriendFromInput(raw, { successSound: 'qrScanSuccess' });
+  } catch (err) {
+    toast(err.message || 'Could not process QR code.', 'error');
+  }
+}
+
+/* ─── Groups ─────────────────────────────────────────────── */
+async function handleCreateGroup(e) {
+  e.preventDefault();
+  const payload = Object.fromEntries(new FormData(e.currentTarget));
+  try {
+    const response = await api('/api/conversations/groups', { method: 'POST', body: payload });
+    await loadBootstrap({ preserveConversation: false });
+    els.groupDialog?.close();
+    e.currentTarget.reset();
+    toast('Group created.', 'success');
+    await openConversation(response.conversation.id);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function handleShareGroupLink() {
+  if (!state.currentConversation?.share_url) return;
+  try {
+    await navigator.clipboard.writeText(state.currentConversation.share_url);
+    toast('Group link copied.', 'success');
+  } catch { toast('Copy failed — clipboard blocked.', 'error'); }
+}
+
+function openAddMemberDialog() {
+  if (!state.currentConversation || state.currentConversation.kind !== 'group') return;
+  const memberIds = new Set(state.currentConversation.member_ids || []);
+  const nonMembers = state.friends.filter((f) => !memberIds.has(f.id));
+  if (!els.addMemberList) return;
+  if (!nonMembers.length) {
+    els.addMemberList.innerHTML = emptyState('All friends are already in this group', '');
+  } else {
+    els.addMemberList.innerHTML = nonMembers.map((f) => `
+      <button class="chat-item" data-add-member="${f.id}" type="button">
+        <div class="avatar avatar-md">${escapeHtml(f.username[0].toUpperCase())}</div>
+        <div class="chat-item-info">
+          <div class="chat-item-name">${escapeHtml(f.username)}</div>
+        </div>
+      </button>`).join('');
+    els.addMemberList.querySelectorAll('[data-add-member]').forEach((btn) =>
+      btn.addEventListener('click', () => addMemberToGroup(btn.dataset.addMember)));
+  }
+  openDialog(els.addMemberDialog);
+}
+
+async function addMemberToGroup(userId) {
+  if (!state.currentConversation) return;
+  try {
+    await api(`/api/conversations/${state.currentConversation.id}/members`, {
+      method: 'POST', body: { user_id: userId },
+    });
+    const friend = state.friends.find((f) => f.id === userId);
+    els.addMemberDialog?.close();
+    toast(`${friend?.username || 'Member'} added to group.`, 'success');
+    await loadBootstrap({ preserveConversation: true });
+    renderConversationHeader();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ─── Settings ───────────────────────────────────────────── */
+async function handlePasswordChange(e) {
+  e.preventDefault();
+  const payload = Object.fromEntries(new FormData(e.currentTarget));
+  try {
+    const response = await api('/api/auth/password-change', { method: 'POST', body: payload });
+    state.me = response.user;
+    e.currentTarget.reset();
+    toast('Password changed. Previous sessions invalidated.', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function handleLogout() {
+  try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
+  disconnectSocket();
+  stopScanner();
+  await leaveCall({ notify: false });
+  state.me = null;
+  state.currentConversation = null;
+  state.currentMessages = [];
+  showScreen('auth');
+  toast('Signed out.', 'success');
+}
+
+/* ─── Route overlay ──────────────────────────────────────── */
+async function handleRouteOverlay() {
+  const page       = document.body.dataset.page;
+  const shareToken = document.body.dataset.shareToken;
+  const friendUuid = document.body.dataset.friendUuid;
+
+  if (!state.me || page === 'home') { hideRouteOverlay(); return; }
+
+  if (page === 'group' && shareToken) {
+    try {
+      const response = await api(`/api/groups/${shareToken}/public`);
+      showRouteOverlay({
+        title: response.group.title,
+        description: response.group.description || `${response.group.member_count} members`,
+        actionLabel: 'Join group',
+        action: async () => {
+          const joined = await api(`/api/groups/join/${shareToken}`, { method: 'POST' });
+          await loadBootstrap({ preserveConversation: false });
+          hideRouteOverlay();
+          toast('Joined group!', 'success');
+          await openConversation(joined.conversation.id);
+        },
+      });
+    } catch (err) {
+      showRouteOverlay({ title: 'Group unavailable', description: err.message, actionLabel: 'Close', action: hideRouteOverlay });
+    }
+    return;
+  }
+
+  if (page === 'friend' && friendUuid) {
+    showRouteOverlay({
+      title: 'Add friend',
+      description: `Add user ${friendUuid} as a friend?`,
+      actionLabel: 'Add friend',
+      action: async () => { await addFriendFromInput(friendUuid); hideRouteOverlay(); },
+    });
+    return;
+  }
+
+  hideRouteOverlay();
+}
+
+function showRouteOverlay({ title, description, actionLabel, action }) {
+  if (els.routeTitle)         els.routeTitle.textContent = title;
+  if (els.routeDescription)   els.routeDescription.textContent = description;
+  if (els.routePrimaryAction) els.routePrimaryAction.textContent = actionLabel;
+  state.routeAction = action;
+  els.routeOverlay?.classList.remove('hidden');
+}
+
+function hideRouteOverlay() {
+  els.routeOverlay?.classList.add('hidden');
+  state.routeAction = null;
+}
+
+/* ─── Incoming call overlay ──────────────────────────────── */
+function showIncomingCallOverlay(payload) {
+  state.incomingCall = payload;
+  if (els.incomingCallerName)    els.incomingCallerName.textContent  = payload.caller.username;
+  if (els.incomingCallModeLabel) els.incomingCallModeLabel.textContent = payload.mode === 'video' ? '📹 Video call' : '🎙 Voice call';
+  if (els.incomingCallerAvatar) {
+    if (payload.caller.avatar_url) {
+      els.incomingCallerAvatar.innerHTML = `<img src="${escapeHtml(payload.caller.avatar_url)}" class="avatar-img" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="">`;
+    } else {
+      els.incomingCallerAvatar.textContent = payload.caller.username[0].toUpperCase();
+    }
+  }
+  els.incomingCallOverlay?.classList.remove('hidden');
+}
+
+function hideIncomingCallOverlay() {
+  els.incomingCallOverlay?.classList.add('hidden');
+  state.incomingCall = null;
+}
+
+async function handleAcceptCall() {
+  const payload = state.incomingCall;
+  if (!payload) return;
+  stopAllCallSounds();
+  hideIncomingCallOverlay();
+  if (state.currentConversation?.id !== payload.conversation_id) {
+    await openConversation(payload.conversation_id);
+  }
+  await joinCall({
+    conversationId: payload.conversation_id,
+    mode: payload.mode,
+    title: payload.conversation_title || state.currentConversation?.title || 'Call',
+    announceStart: false,
+  });
+}
+
+function handleDeclineCall() {
+  const payload = state.incomingCall;
+  if (!payload) return;
+  stopAllCallSounds();
+  hideIncomingCallOverlay();
+  if (state.socket) {
+    state.socket.emit('call:decline', {
+      conversation_id: payload.conversation_id,
+      caller_user_id: payload.caller.id,
+    });
+  }
+}
+
+/* ─── Socket ─────────────────────────────────────────────── */
+function connectSocket() {
+  if (typeof io === 'undefined') {
+    console.warn('socket.io not loaded — real-time updates unavailable');
+    toast('Live connection unavailable — refresh to reconnect.', 'info');
+    return;
+  }
+  if (state.socket) return;
+
+  state.socket = io({ withCredentials: true, transports: ['websocket', 'polling'] });
+
+  state.socket.on('connect', () => {
+    if (state.currentConversation) {
+      state.socket.emit('conversation:join', { conversation_id: state.currentConversation.id });
+    }
+    // Request presence info for all known contacts
+    state.socket.emit('presence:request');
+  });
+
+  state.socket.on('connect_error', (err) => {
+    console.warn('Socket connect error:', err.message);
+  });
+
+  state.socket.on('message:new', ({ message }) => {
+    const isMine = message.sender?.id === state.me?.id;
+    const isOpen = message.conversation_id === state.currentConversation?.id;
+    if (!isMine && (!isOpen || document.hidden)) {
+      playSound('messageReceive', { volume: 0.55 });
+      // Web notification
+      const senderName = message.sender?.username || 'Someone';
+      const convTitle  = state.conversations.find((c) => c.id === message.conversation_id)?.title || senderName;
+      const body = message.deleted_at ? 'Message deleted'
+        : (message.body || (message.message_type === 'voice' ? '🎙 Voice message' : '📎 Attachment'));
+      showWebNotification(convTitle, body, message.sender?.avatar_url || null);
+    }
+    if (isOpen) { upsertMessage(message); scrollToBottom(); }
+    scheduleBootstrapRefresh(120);
+  });
+
+  state.socket.on('message:updated', ({ message }) => {
+    if (message.conversation_id === state.currentConversation?.id) upsertMessage(message);
+    scheduleBootstrapRefresh(120);
+  });
+
+  state.socket.on('message:deleted', ({ message }) => {
+    if (message.conversation_id === state.currentConversation?.id) upsertMessage(message);
+    scheduleBootstrapRefresh(120);
+  });
+
+  state.socket.on('message:reaction', ({ message }) => {
+    if (message.conversation_id === state.currentConversation?.id) upsertMessage(message);
+  });
+
+  state.socket.on('conversation:updated', () => { scheduleBootstrapRefresh(150); });
+
+  state.socket.on('conversation:deleted', ({ conversation_id }) => {
+    if (state.currentConversation?.id === conversation_id) closeChatPane();
+    state.conversations = state.conversations.filter((c) => c.id !== conversation_id);
+    renderConversationList();
+    renderGroupList();
+    scheduleBootstrapRefresh(150);
+  });
+
+  state.socket.on('conversation:read', ({ conversation_id, user_id, read_at }) => {
+    const conv = state.conversations.find((c) => c.id === conversation_id);
+    if (conv && user_id !== state.me?.id) {
+      conv.partner_last_read_at = read_at;
+      // Also update members_read_at for groups
+      if (conv.kind === 'group') {
+        if (!conv.members_read_at) conv.members_read_at = {};
+        conv.members_read_at[user_id] = read_at;
+      }
+      if (state.currentConversation?.id === conversation_id) {
+        state.currentConversation.partner_last_read_at = read_at;
+        if (state.currentConversation.kind === 'group') {
+          if (!state.currentConversation.members_read_at) state.currentConversation.members_read_at = {};
+          state.currentConversation.members_read_at[user_id] = read_at;
+        }
+        renderMessages();
+      }
+    }
+  });
+
+  state.socket.on('friend:added', (payload) => {
+    scheduleBootstrapRefresh(150);
+    if (payload.initiator_user_id !== state.me?.id) playSound('friendAdded', { volume: 0.65 });
+  });
+
+  state.socket.on('friend:removed', () => { scheduleBootstrapRefresh(150); });
+  state.socket.on('story:new', () => { scheduleBootstrapRefresh(200); });
+
+  state.socket.on('user:online', ({ user_id }) => {
+    state.onlineUsers.add(user_id);
+    updatePresenceUI(user_id);
+  });
+
+  state.socket.on('user:offline', ({ user_id }) => {
+    state.onlineUsers.delete(user_id);
+    updatePresenceUI(user_id);
+  });
+
+  state.socket.on('presence:snapshot', ({ online_user_ids }) => {
+    // Merge snapshot into onlineUsers and refresh all
+    (online_user_ids || []).forEach((id) => state.onlineUsers.add(id));
+    // Re-render lists to reflect initial online state
+    renderConversationList();
+    renderFriendList();
+    // Also update header if a conversation is open
+    if (state.currentConversation) renderConversationHeader();
+  });
+
+  // Typing indicators
+  state.socket.on('typing:start', ({ conversation_id, user_id, username }) => {
+    if (user_id === state.me?.id) return;
+    if (!state.typingUsers[conversation_id]) state.typingUsers[conversation_id] = {};
+    // Clear any existing timeout for this user
+    const prev = state.typingUsers[conversation_id][user_id];
+    if (prev?.timer) clearTimeout(prev.timer);
+    const timer = setTimeout(() => {
+      delete state.typingUsers[conversation_id][user_id];
+      if (state.currentConversation?.id === conversation_id) updateTypingIndicator();
+    }, 4000);
+    state.typingUsers[conversation_id][user_id] = { username, timer };
+    if (state.currentConversation?.id === conversation_id) updateTypingIndicator();
+  });
+
+  state.socket.on('typing:stop', ({ conversation_id, user_id }) => {
+    if (state.typingUsers[conversation_id]?.[user_id]) {
+      clearTimeout(state.typingUsers[conversation_id][user_id].timer);
+      delete state.typingUsers[conversation_id][user_id];
+    }
+    if (state.currentConversation?.id === conversation_id) updateTypingIndicator();
+  });
+
+  // ── Calls ──
+  state.socket.on('call:incoming', async (payload) => {
+    if (state.call.active) {
+      state.socket.emit('call:decline', { conversation_id: payload.conversation_id, caller_user_id: payload.caller.id });
+      return;
+    }
+    playSound('incomingRingtone', { loop: true, volume: 0.85 });
+    showIncomingCallOverlay(payload);
+  });
+
+  state.socket.on('call:participants', async ({ participants }) => {
+    for (const userId of participants) await sendOffer(userId);
+  });
+
+  state.socket.on('call:participant-joined', ({ user_id: userId }) => {
+    if (userId === state.me?.id) return;
+    stopSound('callRingback');
+    playSound('callAnswer', { volume: 0.65 });
+  });
+
+  state.socket.on('call:participant-left',  ({ user_id: userId }) => {
+    if (userId !== state.me?.id) removeRemotePeer(userId);
+  });
+  state.socket.on('call:declined',          ({ source_user_id: userId }) => {
+    stopSound('callRingback');
+    toast(`${displayNameForUser(userId)} declined the call.`, 'info');
+  });
+
+  // Fix 7: caller ended call before answer, OR everyone left → dismiss/end
+  state.socket.on('call:ended', ({ conversation_id }) => {
+    // If we are ringing for this conversation, dismiss the incoming UI
+    if (state.incomingCall?.conversation_id === conversation_id) {
+      stopAllCallSounds();
+      hideIncomingCallOverlay();
+      toast('The call has ended.', 'info');
+    }
+    // If we are in this call and now alone, leave cleanly
+    if (state.call.active && state.call.conversationId === conversation_id && state.call.peers.size === 0) {
+      leaveCall({ notify: false });
+    }
+  });
+
+  state.socket.on('webrtc:offer', async ({ source_user_id: userId, payload }) => {
+    const peer = createPeer(userId);
+    await peer.pc.setRemoteDescription(payload);
+    await flushPendingIce(peer);
+    const answer = await peer.pc.createAnswer();
+    await peer.pc.setLocalDescription(answer);
+    state.socket.emit('webrtc:answer', {
+      conversation_id: state.call.conversationId,
+      target_user_id: userId,
+      payload: peer.pc.localDescription,
+    });
+  });
+
+  state.socket.on('webrtc:answer', async ({ source_user_id: userId, payload }) => {
+    stopSound('callRingback');
+    const peer = state.call.peers.get(userId);
+    if (!peer) return;
+    await peer.pc.setRemoteDescription(payload);
+    await flushPendingIce(peer);
+  });
+
+  state.socket.on('webrtc:ice-candidate', async ({ source_user_id: userId, payload }) => {
+    const peer = createPeer(userId);
+    if (peer.pc.remoteDescription) { await peer.pc.addIceCandidate(payload); }
+    else { peer.pendingCandidates.push(payload); }
+  });
+
+  state.socket.on('webrtc:hangup', ({ source_user_id: userId }) => removeRemotePeer(userId));
+}
+
+function disconnectSocket() {
+  if (!state.socket) return;
+  state.socket.disconnect();
+  state.socket = null;
+}
+
+/* ─── Calls ──────────────────────────────────────────────── */
+async function startCallSafe(mode) {
+  try { await startCall(mode); }
+  catch (err) { toast(err.message || 'Could not start call.', 'error'); }
+}
+
+async function startCall(mode) {
+  if (!state.currentConversation) throw new Error('Open a conversation first.');
+  if (state.call.active && state.call.conversationId === state.currentConversation.id) {
+    if (state.call.mode === mode) { toast('Already in this call.', 'info'); return; }
+    await leaveCall({ notify: true });
+  }
+  await joinCall({
+    conversationId: state.currentConversation.id,
+    mode,
+    title: state.currentConversation.title,
+    announceStart: true,
+  });
+}
+
+async function joinCall({ conversationId, mode, title, announceStart }) {
+  if (!state.socket) connectSocket();
+  if (!state.socket) throw new Error('Socket connection unavailable.');
+
+  if (state.call.active && state.call.conversationId !== conversationId) await leaveCall({ notify: true });
+
+  const needsVideo = mode === 'video';
+  const hasVideo   = Boolean(state.call.localStream?.getVideoTracks().length);
+
+  if (!state.call.localStream || (needsVideo && !hasVideo) || (!needsVideo && hasVideo)) {
+    if (state.call.localStream) state.call.localStream.getTracks().forEach((t) => t.stop());
+    state.call.localStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: needsVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: state.call.facingMode } : false,
+    });
+  }
+
+  state.call.active         = true;
+  state.call.conversationId = conversationId;
+  state.call.mode           = mode;
+  state.call.title          = title;
+  state.call.muted          = false;
+  state.call.screenSharing  = false;
+  state.call.startTime      = Date.now();
+
+  if (els.callModeLabel)  els.callModeLabel.textContent  = mode === 'video' ? 'Video call' : 'Voice call';
+  if (els.callTitle)      els.callTitle.textContent      = title;
+  if (els.callOverlay)    els.callOverlay.classList.remove('hidden');
+  if (els.localVideo)     { els.localVideo.srcObject = state.call.localStream; els.localVideo.style.display = needsVideo ? 'block' : 'none'; }
+  if (els.remoteVideos)   els.remoteVideos.innerHTML = '';
+  // Update mute icon
+  updateMuteUI();
+  // Fix 5: Hide flip camera and screen share in voice mode
+  if (els.flipCamera)       els.flipCamera.style.display = needsVideo ? '' : 'none';
+
+  // Fix 4: Toggle between voice card grid and video grid
+  if (els.callVoiceGrid) els.callVoiceGrid.classList.toggle('hidden', needsVideo);
+  if (els.callVideoGrid) els.callVideoGrid.classList.toggle('hidden', !needsVideo);
+  if (!needsVideo) {
+    // Build self card in voice grid
+    if (els.callVoiceGrid) {
+      els.callVoiceGrid.innerHTML = '';
+      els.callVoiceGrid.appendChild(buildVoiceCard(state.me?.id, 'You', state.me?.avatar_url));
+    }
+    startSpeakDetector(state.me?.id, state.call.localStream);
+  }
+
+  // Start call duration timer
+  clearInterval(state.call.durationTimer);
+  state.call.durationTimer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - state.call.startTime) / 1000);
+    const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const s = (elapsed % 60).toString().padStart(2, '0');
+    if (els.callDuration) els.callDuration.textContent = `${m}:${s}`;
+  }, 1000);
+
+  stopSound('incomingRingtone');
+  if (announceStart) {
+    playSound('callRingback', { loop: true, volume: 0.45 });
+    state.socket.emit('call:start', { conversation_id: conversationId, mode });
+  }
+  state.socket.emit('call:join', { conversation_id: conversationId, mode });
+}
+
+/* In-call controls */
+function handleToggleMute() {
+  if (!state.call.localStream) return;
+  state.call.muted = !state.call.muted;
+  state.call.localStream.getAudioTracks().forEach((t) => { t.enabled = !state.call.muted; });
+  updateMuteUI();
+}
+
+function updateMuteUI() {
+  if (!els.toggleMute) return;
+  if (state.call.muted) {
+    els.toggleMute.classList.add('active');
+    els.muteIconOn?.classList.add('hidden');
+    els.muteIconOff?.classList.remove('hidden');
+    els.toggleMute.querySelector('span').textContent = 'Unmute';
+  } else {
+    els.toggleMute.classList.remove('active');
+    els.muteIconOn?.classList.remove('hidden');
+    els.muteIconOff?.classList.add('hidden');
+    els.toggleMute.querySelector('span').textContent = 'Mute';
+  }
+}
+
+async function handleFlipCamera() {
+  if (!state.call.active || state.call.mode !== 'video') return;
+  state.call.facingMode = state.call.facingMode === 'user' ? 'environment' : 'user';
+  try {
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: state.call.facingMode },
+    });
+    const newVideoTrack = newStream.getVideoTracks()[0];
+    const newAudioTrack = newStream.getAudioTracks()[0];
+    if (newAudioTrack) newAudioTrack.enabled = !state.call.muted;
+
+    // Replace tracks in all peer connections
+    for (const peer of state.call.peers.values()) {
+      const sender = peer.pc.getSenders().find((s) => s.track?.kind === 'video');
+      if (sender && newVideoTrack) sender.replaceTrack(newVideoTrack);
+    }
+
+    state.call.localStream.getTracks().forEach((t) => t.stop());
+    state.call.localStream = newStream;
+    if (els.localVideo) els.localVideo.srcObject = newStream;
+  } catch (err) { toast('Could not flip camera: ' + err.message, 'error'); }
+}
+
+async function handleToggleScreenShare() {
+  if (!state.call.active) return;
+  if (state.call.screenSharing) {
+    // Stop screen share, revert to camera
+    state.call.screenSharing = false;
+    els.toggleScreenShare?.classList.remove('active');
+    if (els.toggleScreenShare?.querySelector('span')) els.toggleScreenShare.querySelector('span').textContent = 'Share';
+    try {
+      // Stop existing screen tracks from local stream
+      state.call.localStream.getVideoTracks().forEach((t) => t.stop());
+
+      const camStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: state.call.facingMode },
+      });
+      const newVideoTrack = camStream.getVideoTracks()[0];
+
+      // Remove old video tracks from localStream and add new camera track
+      state.call.localStream.getVideoTracks().forEach((t) => state.call.localStream.removeTrack(t));
+      state.call.localStream.addTrack(newVideoTrack);
+
+      // Replace track in all peer connections
+      for (const peer of state.call.peers.values()) {
+        const sender = peer.pc.getSenders().find((s) => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(newVideoTrack);
+      }
+      if (els.localVideo) {
+        els.localVideo.srcObject = null;
+        els.localVideo.srcObject = state.call.localStream;
+        els.localVideo.style.display = 'block';
+      }
+    } catch (err) { toast('Could not restore camera: ' + err.message, 'error'); }
+    return;
+  }
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    toast('Screen sharing not supported in this browser.', 'error'); return;
+  }
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    const screenTrack  = screenStream.getVideoTracks()[0];
+    state.call.screenSharing = true;
+    els.toggleScreenShare?.classList.add('active');
+    if (els.toggleScreenShare?.querySelector('span')) els.toggleScreenShare.querySelector('span').textContent = 'Stop';
+
+    // Stop camera video tracks and replace with screen track in localStream
+    state.call.localStream.getVideoTracks().forEach((t) => { t.stop(); state.call.localStream.removeTrack(t); });
+    state.call.localStream.addTrack(screenTrack);
+
+    // Replace video track in all peer connections
+    for (const peer of state.call.peers.values()) {
+      const sender = peer.pc.getSenders().find((s) => s.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(screenTrack);
+      else peer.pc.addTrack(screenTrack, state.call.localStream);
+    }
+    if (els.localVideo) {
+      els.localVideo.srcObject = null;
+      els.localVideo.srcObject = state.call.localStream;
+      els.localVideo.style.display = 'block';
+    }
+    // Auto-stop when user stops sharing via browser UI
+    screenTrack.addEventListener('ended', () => { if (state.call.screenSharing) handleToggleScreenShare(); });
+  } catch (err) {
+    if (err.name !== 'NotAllowedError') toast('Screen share failed: ' + err.message, 'error');
+  }
+}
+
+function createPeer(userId) {
+  const existing = state.call.peers.get(userId);
+  if (existing) return existing;
+  const pc = new RTCPeerConnection({ iceServers: state.iceServers });
+  const remoteStream = new MediaStream();
+  const peer = { pc, remoteStream, pendingCandidates: [] };
+  state.call.peers.set(userId, peer);
+  renderRemoteVideo(userId, remoteStream);
+  state.call.localStream?.getTracks().forEach((track) => pc.addTrack(track, state.call.localStream));
+  pc.ontrack = (ev) => {
+    ev.streams[0].getTracks().forEach((t) => {
+      if (!remoteStream.getTracks().some((x) => x.id === t.id)) remoteStream.addTrack(t);
+    });
+  };
+  pc.onicecandidate = (ev) => {
+    if (!ev.candidate || !state.socket) return;
+    state.socket.emit('webrtc:ice-candidate', {
+      conversation_id: state.call.conversationId,
+      target_user_id: userId,
+      payload: ev.candidate,
+    });
+  };
+  pc.onconnectionstatechange = () => {
+    if (['closed','failed','disconnected'].includes(pc.connectionState)) removeRemotePeer(userId);
+  };
+  return peer;
+}
+
+async function sendOffer(userId) {
+  const peer  = createPeer(userId);
+  const offer = await peer.pc.createOffer();
+  await peer.pc.setLocalDescription(offer);
+  state.socket.emit('webrtc:offer', {
+    conversation_id: state.call.conversationId,
+    target_user_id: userId,
+    payload: peer.pc.localDescription,
+    mode: state.call.mode,
+  });
+}
+
+async function flushPendingIce(peer) {
+  while (peer.pendingCandidates.length) {
+    await peer.pc.addIceCandidate(peer.pendingCandidates.shift());
+  }
+}
+
+function renderRemoteVideo(userId, stream) {
+  // Video grid card
+  let card = els.remoteVideos?.querySelector(`[data-remote-user="${userId}"]`);
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'remote-video-card';
+    card.dataset.remoteUser = userId;
+    const video = document.createElement('video');
+    video.autoplay = true; video.playsInline = true;
+    card.appendChild(video);
+    const label = document.createElement('span');
+    label.textContent = displayNameForUser(userId);
+    card.appendChild(label);
+    els.remoteVideos?.appendChild(card);
+  }
+  card.querySelector('video').srcObject = stream;
+
+  // Voice grid card
+  if (state.call.mode === 'voice' && els.callVoiceGrid) {
+    if (!els.callVoiceGrid.querySelector(`[data-call-user="${userId}"]`)) {
+      const friend = state.friends.find((f) => f.id === userId);
+      const avatarUrl = friend?.avatar_url || null;
+      const name = displayNameForUser(userId);
+      els.callVoiceGrid.appendChild(buildVoiceCard(userId, name, avatarUrl));
+    }
+    startSpeakDetector(userId, stream);
+  }
+}
+
+function removeRemotePeer(userId) {
+  const peer = state.call.peers.get(userId);
+  if (peer) {
+    peer.pc.onicecandidate = null; peer.pc.ontrack = null; peer.pc.onconnectionstatechange = null;
+    peer.pc.close();
+    state.call.peers.delete(userId);
+  }
+  els.remoteVideos?.querySelector(`[data-remote-user="${userId}"]`)?.remove();
+  // Remove voice card + stop speak detector
+  els.callVoiceGrid?.querySelector(`[data-call-user="${userId}"]`)?.remove();
+  stopSpeakDetector(userId);
+  // Fix 7: if no peers left in a voice/video call, auto-leave (last person in call)
+  if (state.call.active && state.call.peers.size === 0) {
+    leaveCall({ notify: true });
+  }
+}
+
+async function leaveCall({ notify }) {
+  stopAllCallSounds();
+  clearInterval(state.call.durationTimer);
+  state.call.durationTimer = null;
+  if (!state.call.active) return;
+  if (notify && state.socket) {
+    for (const userId of state.call.peers.keys()) {
+      state.socket.emit('webrtc:hangup', {
+        conversation_id: state.call.conversationId,
+        target_user_id: userId,
+        payload: null,
+      });
+    }
+    state.socket.emit('call:leave', { conversation_id: state.call.conversationId });
+  }
+  for (const userId of Array.from(state.call.peers.keys())) {
+    const peer = state.call.peers.get(userId);
+    if (peer) { peer.pc.onicecandidate = null; peer.pc.ontrack = null; peer.pc.onconnectionstatechange = null; peer.pc.close(); state.call.peers.delete(userId); }
+  }
+  stopAllSpeakDetectors();
+  state.call.localStream?.getTracks().forEach((t) => t.stop());
+  state.call.localStream       = null;
+  state.call.active            = false;
+  state.call.conversationId    = null;
+  state.call.title             = '';
+  state.call.muted             = false;
+  state.call.screenSharing     = false;
+  if (els.localVideo)  els.localVideo.srcObject = null;
+  if (els.remoteVideos) els.remoteVideos.innerHTML = '';
+  if (els.callVoiceGrid) els.callVoiceGrid.innerHTML = '';
+  if (els.callDuration) els.callDuration.textContent = '00:00';
+  els.callOverlay?.classList.add('hidden');
+}
+
+
+/* ─── Voice call participant cards ──────────────────────── */
+function buildVoiceCard(userId, name, avatarUrl) {
+  const card = document.createElement('div');
+  card.className = 'call-participant-card';
+  card.dataset.callUser = userId;
+  const avatarDiv = document.createElement('div');
+  avatarDiv.className = 'card-avatar';
+  if (avatarUrl) {
+    const img = document.createElement('img');
+    img.src = avatarUrl; img.alt = '';
+    avatarDiv.appendChild(img);
+  } else {
+    avatarDiv.textContent = (name || '?')[0].toUpperCase();
+  }
+  const nameEl = document.createElement('span');
+  nameEl.className = 'card-name';
+  nameEl.textContent = name;
+  card.appendChild(avatarDiv);
+  card.appendChild(nameEl);
+  return card;
+}
+
+/* ─── Speaking detection ─────────────────────────────────── */
+function startSpeakDetector(userId, stream) {
+  if (!stream) return;
+  stopSpeakDetector(userId);
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.5;
+    source.connect(analyser);
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    let raf = null;
+    const THRESHOLD = 18;
+    const tick = () => {
+      if (!state.call.active) { stopSpeakDetector(userId); return; }
+      analyser.getByteFrequencyData(buf);
+      const avg = buf.reduce((s, v) => s + v, 0) / buf.length;
+      const card = els.callVoiceGrid?.querySelector(`[data-call-user="${userId}"]`);
+      if (card) card.classList.toggle('speaking', avg > THRESHOLD);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    state.call.speakDetectors.set(userId, { audioCtx, analyser, raf });
+  } catch { /* AudioContext may not be available */ }
+}
+
+function stopSpeakDetector(userId) {
+  const det = state.call.speakDetectors.get(userId);
+  if (!det) return;
+  if (det.raf) cancelAnimationFrame(det.raf);
+  try { det.audioCtx.close(); } catch { /* ignore */ }
+  state.call.speakDetectors.delete(userId);
+}
+
+function stopAllSpeakDetectors() {
+  for (const userId of Array.from(state.call.speakDetectors.keys())) stopSpeakDetector(userId);
+}
+
+/* ─── Group info dialog ──────────────────────────────────── */
+async function openGroupInfoDialog() {
+  const c = state.currentConversation;
+  if (!c || c.kind !== 'group' || !els.groupInfoDialog) return;
+
+  const iconUrl = c.icon_url ? c.icon_url + '?t=' + Date.now() : null;
+  const iconHtml = iconUrl
+    ? `<img src="${escapeHtml(iconUrl)}" alt="">`
+    : `<span>${escapeHtml((c.title || '?')[0].toUpperCase())}</span>`;
+
+  let membersHtml = '<div class="empty-state"><span>Loading members…</span></div>';
+  if (els.groupInfoBody) {
+    els.groupInfoBody.innerHTML = `
+      <div style="text-align:center">
+        <div class="group-info-icon-wrap">
+          <div class="group-info-icon" id="ginfo-icon">${iconHtml}</div>
+          <label class="group-info-icon-edit" title="Change icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="12" height="12"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+            <input id="group-icon-input" type="file" accept="image/*" style="display:none">
+          </label>
+        </div>
+        <h3 style="margin-top:.9rem;font-size:1.1rem;font-weight:700">${escapeHtml(c.title)}</h3>
+        ${c.member_count ? `<p style="color:var(--muted);font-size:.8rem;margin-top:.2rem">${c.member_count} members</p>` : ''}
+      </div>
+      <hr class="divider">
+      <p class="label">Members</p>
+      <div id="ginfo-members" class="group-members-list">${membersHtml}</div>
+      <hr class="divider">
+      <button id="ginfo-leave" class="btn-danger w-full" type="button" style="margin-top:.25rem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>
+        Leave group
+      </button>`;
+  }
+
+  openDialog(els.groupInfoDialog);
+
+  // Bind icon upload
+  document.getElementById('group-icon-input')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await api(`/api/conversations/${c.id}/icon`, { method: 'POST', body: fd });
+      // Refresh icon in dialog
+      const iconEl = document.getElementById('ginfo-icon');
+      if (iconEl) iconEl.innerHTML = `<img src="${escapeHtml(res.icon_url)}?t=${Date.now()}" alt="">`;
+      // Update local conversation state
+      const conv = state.conversations.find((x) => x.id === c.id);
+      if (conv) conv.icon_url = res.icon_url;
+      if (state.currentConversation?.id === c.id) state.currentConversation.icon_url = res.icon_url;
+      toast('Group icon updated.', 'success');
+    } catch (err) { toast(err.message, 'error'); }
+  });
+
+  // Bind leave
+  document.getElementById('ginfo-leave')?.addEventListener('click', () => {
+    els.groupInfoDialog.close();
+    handleLeaveConversation();
+  });
+
+  // Load members
+  try {
+    const res = await api(`/api/conversations/${c.id}/members`);
+    const membersEl = document.getElementById('ginfo-members');
+    if (!membersEl) return;
+    if (!res.members?.length) { membersEl.innerHTML = emptyState('No members', ''); return; }
+    membersEl.innerHTML = res.members.map((m) => {
+      const isOnline = state.onlineUsers.has(m.id);
+      const status = isOnline ? 'Online' : (m.last_seen_at ? `Last seen ${formatRelativeTime(m.last_seen_at)}` : '');
+      const avatarHtml = m.avatar_url
+        ? `<div class="avatar avatar-sm"><img class="avatar-img" src="${escapeHtml(m.avatar_url)}" alt=""></div>`
+        : `<div class="avatar avatar-sm">${escapeHtml(m.username[0].toUpperCase())}</div>`;
+      return `
+        <div class="group-member-row">
+          ${avatarHtml}
+          <div class="group-member-info">
+            <div class="group-member-name">${escapeHtml(m.username)}${m.role === 'owner' ? ' <span style="font-size:.65rem;color:var(--primary);font-weight:600">Owner</span>' : ''}</div>
+            ${status ? `<div class="group-member-status${isOnline ? ' online-status' : ''}">${escapeHtml(status)}</div>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ─── Bootstrap refresh ──────────────────────────────────── */
+function scheduleBootstrapRefresh(delay = 400) {
+  window.clearTimeout(state.bootstrapTimer);
+  state.bootstrapTimer = window.setTimeout(() => {
+    loadBootstrap({ preserveConversation: true }).catch((err) => console.error(err));
+  }, delay);
+}
+
+/* ─── Utilities ──────────────────────────────────────────── */
+function openDialog(dialog) { dialog?.showModal(); }
+
+function displayNameForUser(userId) {
+  if (userId === state.me?.id) return 'You';
+  const friend = state.friends.find((f) => f.id === userId);
+  if (friend) return friend.username;
+  if (state.currentConversation?.partner?.id === userId) return state.currentConversation.partner.username;
+  return `User ${userId.slice(0, 8)}`;
+}
+
+function autoResizeComposer() {
+  if (!els.composerInput) return;
+  els.composerInput.style.height = 'auto';
+  els.composerInput.style.height = `${Math.min(els.composerInput.scrollHeight, 120)}px`;
+}
+
+async function api(url, { method = 'GET', body } = {}) {
+  const options = { method, credentials: 'include', headers: {} };
+  if (body instanceof FormData) {
+    options.body = body;
+  } else if (body !== undefined) {
+    options.headers['Content-Type'] = 'application/json';
+    options.body = JSON.stringify(body);
+  }
+  if (!['GET','HEAD','OPTIONS'].includes(method.toUpperCase())) {
+    const csrf = getCookie('csrf_access_token');
+    if (csrf) options.headers['X-CSRF-TOKEN'] = csrf;
+  }
+  const response = await fetch(url, options);
+  const ct   = response.headers.get('content-type') || '';
+  const data = ct.includes('application/json') ? await response.json() : await response.text();
+  if (!response.ok) {
+    const message = typeof data === 'string' ? data : (data.error || 'Request failed.');
+    const err = new Error(message);
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
+function toast(message, type = 'info') {
+  const node = document.createElement('div');
+  node.className = `toast ${type}`;
+  node.textContent = message;
+  els.toastRoot?.appendChild(node);
+  window.setTimeout(() => node.remove(), 3600);
+}
+
+function formatTime(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  if (isToday) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function formatRelativeTime(value) {
+  if (!value) return '';
+  const d   = new Date(value);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1)  return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24)   return `${diffH}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7)    return `${diffD}d ago`;
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function getCookie(name) {
+  const encoded = `${encodeURIComponent(name)}=`;
+  for (const cookie of (document.cookie ? document.cookie.split('; ') : [])) {
+    if (cookie.startsWith(encoded)) return decodeURIComponent(cookie.slice(encoded.length));
+  }
+  return '';
+}
+
+// ─── Stories ─────────────────────────────────────────────────────────────────
+
+function renderStoryBar() {
+  if (!els.storyBar) return;
+  const groups = state.stories || [];
+  els.storyBar.innerHTML = groups.map((g, gi) => {
+    const hasStories = g.stories.length > 0;
+    const isMe = g.user_id === state.me?.id;
+    const letter = (g.username || '?')[0].toUpperCase();
+    const innerContent = g.avatar_url
+      ? `<img src="${escapeHtml(g.avatar_url)}" alt="${escapeHtml(g.username)}" onerror="this.parentElement.textContent='${escapeHtml(letter)}';">`
+      : escapeHtml(letter);
+    return `
+      <div class="story-avatar-wrap" data-story-group="${gi}" title="${escapeHtml(g.username)}">
+        <div class="story-ring ${hasStories ? 'unseen' : 'no-story'}" style="position:relative">
+          <div class="story-ring-inner">${innerContent}</div>
+          ${isMe ? `<div class="story-plus-badge">+</div>` : ''}
+        </div>
+        <span class="story-name">${isMe ? 'My Story' : escapeHtml(g.username)}</span>
+      </div>`;
+  }).join('');
+
+  els.storyBar.querySelectorAll('[data-story-group]').forEach((el) => {
+    // Plus badge: always triggers file upload, never opens the viewer
+    const badge = el.querySelector('.story-plus-badge');
+    if (badge) {
+      badge.addEventListener('click', (evt) => {
+        evt.stopPropagation();
+        const gi = parseInt(el.dataset.storyGroup, 10);
+        if (els.storyFileInput) {
+          els.storyFileInput._pendingGroupIndex = gi;
+          els.storyFileInput.click();
+        }
+      });
+    }
+
+    el.addEventListener('click', () => {
+      const gi = parseInt(el.dataset.storyGroup, 10);
+      const group = state.stories[gi];
+      const isMe = group.user_id === state.me?.id;
+      if (isMe && group.stories.length === 0) {
+        els.storyFileInput?.click();
+        els.storyFileInput._pendingGroupIndex = gi;
+        return;
+      }
+      openStoryViewer(gi, 0, el);
+    });
+  });
+}
+
+async function handleStoryFileSelected(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const result = await api('/api/stories', { method: 'POST', body: fd });
+    // Bootstrap refresh will be triggered by the story:new socket event.
+    // We load it explicitly now and then open the viewer at the new story.
+    await loadBootstrap({ preserveConversation: true });
+
+    // Find the group belonging to the current user and navigate to the fresh story
+    const myGi = state.stories.findIndex((g) => g.user_id === state.me?.id);
+    if (myGi >= 0 && state.stories[myGi].stories.length > 0) {
+      const newSi = state.stories[myGi].stories.findIndex((s) => s.id === result?.story?.id);
+      openStoryViewer(myGi, newSi >= 0 ? newSi : state.stories[myGi].stories.length - 1, null);
+    }
+
+    toast('Story posted!', 'success');
+  } catch (err) { toast(err.message, 'error'); }
+  e.target.value = '';
+}
+
+const SV_DURATION = 5000; // ms per story segment for images; videos use their own duration
+
+function openStoryViewer(groupIndex, storyIndex, originEl) {
+  state.storyViewer.open = true;
+  state.storyViewer.groupIndex = groupIndex;
+  state.storyViewer.storyIndex = storyIndex;
+
+  if (originEl && els.svRipple) {
+    const rect = originEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const size = Math.max(window.innerWidth, window.innerHeight) * 2;
+    els.svRipple.style.cssText = `width:${size}px;height:${size}px;left:${cx - size/2}px;top:${cy - size/2}px`;
+    els.svRipple.classList.remove('hidden');
+    els.svRipple.style.animation = 'none';
+    requestAnimationFrame(() => {
+      els.svRipple.style.animation = 'ripple-out .55s ease-out forwards';
+    });
+  }
+
+  els.storyViewer?.classList.remove('hidden');
+  renderStoryViewerContent();
+}
+
+function renderStoryViewerContent() {
+  const sv = state.storyViewer;
+  const group = state.stories[sv.groupIndex];
+  if (!group) { closeStoryViewer(); return; }
+  const story = group.stories[sv.storyIndex];
+  if (!story) { closeStoryViewer(); return; }
+
+  // Avatar: prefer story-level avatar_url → group-level → letter fallback
+  if (els.svAvatar) {
+    const avatarUrl = story.avatar_url || group.avatar_url || null;
+    els.svAvatar.innerHTML = '';
+    if (avatarUrl) {
+      const img = document.createElement('img');
+      img.src = avatarUrl;
+      img.className = 'avatar-img';
+      img.alt = group.username || '';
+      img.onerror = () => { img.remove(); els.svAvatar.textContent = (group.username || '?')[0].toUpperCase(); };
+      els.svAvatar.appendChild(img);
+    } else {
+      els.svAvatar.textContent = (group.username || '?')[0].toUpperCase();
+    }
+  }
+  if (els.svUsername) els.svUsername.textContent = group.username;
+  if (els.svTime)     els.svTime.textContent     = formatRelativeTime(story.created_at);
+  if (els.svCaption)  els.svCaption.textContent  = story.caption || '';
+
+  const isOwn = group.user_id === state.me?.id;
+  if (els.svReplyForm) els.svReplyForm.classList.toggle('hidden', isOwn);
+
+  if (els.svProgressRow) {
+    els.svProgressRow.innerHTML = group.stories.map((_, i) => `
+      <div class="sv-seg">
+        <div class="sv-seg-fill${i < sv.storyIndex ? ' done' : ''}" id="sv-seg-${i}" style="width:${i < sv.storyIndex ? '100%' : '0%'}"></div>
+      </div>`).join('');
+  }
+
+  clearStoryTimer();
+  sv.paused = false;
+  if (sv.mediaEl) { sv.mediaEl.pause?.(); sv.mediaEl.remove?.(); sv.mediaEl = null; }
+  const wrap = els.svMediaWrap;
+  wrap.querySelectorAll('img,video').forEach((n) => n.remove());
+
+  let duration = SV_DURATION;
+  if (story.media_type === 'video') {
+    const vid = document.createElement('video');
+    vid.src = story.url;
+    vid.autoplay = true;
+    vid.playsInline = true;
+    vid.controls = false;
+    vid.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
+    wrap.appendChild(vid);
+    sv.mediaEl = vid;
+    vid.addEventListener('loadedmetadata', () => {
+      duration = (vid.duration || 10) * 1000;
+      startSegmentTimer(duration, sv.storyIndex);
+    });
+    vid.addEventListener('ended', () => advanceStory());
+  } else {
+    const img = document.createElement('img');
+    img.src = story.url;
+    img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
+    wrap.appendChild(img);
+    sv.mediaEl = img;
+    startSegmentTimer(duration, sv.storyIndex);
+  }
+}
+
+function startSegmentTimer(duration, segIndex) {
+  const sv = state.storyViewer;
+  sv.segmentDuration    = duration;
+  sv.segmentStartedAt   = Date.now();
+  sv.segmentElapsed     = 0;
+  sv.paused             = false;
+  _applySegmentAnimation(segIndex, duration);
+  clearStoryTimer();
+  sv.timer = window.setTimeout(advanceStory, duration);
+}
+
+// Internal: set the CSS progress-bar animation for a segment with a given remaining time
+function _applySegmentAnimation(segIndex, remainingMs) {
+  const fillEl = document.getElementById(`sv-seg-${segIndex}`);
+  if (!fillEl) return;
+  fillEl.style.transition = `width ${remainingMs}ms linear`;
+  requestAnimationFrame(() => { fillEl.style.width = '100%'; });
+}
+
+function pauseStoryViewer() {
+  const sv = state.storyViewer;
+  if (sv.paused || !sv.open) return;
+  sv.paused = true;
+
+  // Accumulate elapsed time so resume knows how much is left
+  sv.segmentElapsed += Date.now() - sv.segmentStartedAt;
+  clearStoryTimer();
+
+  // Freeze the CSS progress bar at its current rendered width
+  const fillEl = document.getElementById(`sv-seg-${sv.storyIndex}`);
+  if (fillEl) {
+    const frozenWidth = getComputedStyle(fillEl).width;
+    fillEl.style.transition = 'none';
+    fillEl.style.width = frozenWidth;
+  }
+
+  // Pause video playback
+  sv.mediaEl?.pause?.();
+
+  // Visual feedback
+  els.storyViewer?.classList.add('sv-paused');
+}
+
+function resumeStoryViewer() {
+  const sv = state.storyViewer;
+  if (!sv.paused || !sv.open) return;
+  sv.paused = false;
+
+  const remaining = Math.max(sv.segmentDuration - sv.segmentElapsed, 0);
+  sv.segmentStartedAt = Date.now();
+
+  // Resume video first so its timeline stays in sync with the timer
+  if (sv.mediaEl?.paused === true) sv.mediaEl.play().catch(() => {});
+
+  // For images (no video ended event) restart the segment timer for the remaining time.
+  // For videos the 'ended' event still fires; we keep a safety timer too.
+  _applySegmentAnimation(sv.storyIndex, remaining);
+  clearStoryTimer();
+  sv.timer = window.setTimeout(advanceStory, remaining);
+
+  // Remove visual feedback
+  els.storyViewer?.classList.remove('sv-paused');
+}
+
+function goToPreviousStory() {
+  const sv = state.storyViewer;
+  if (sv.storyIndex > 0) {
+    sv.storyIndex--;
+    renderStoryViewerContent();
+  } else if (sv.groupIndex > 0) {
+    // Walk backwards skipping empty groups
+    let prevGi = sv.groupIndex - 1;
+    while (prevGi > 0 && state.stories[prevGi].stories.length === 0) prevGi--;
+    if (state.stories[prevGi]?.stories.length > 0) {
+      sv.groupIndex = prevGi;
+      sv.storyIndex = state.stories[prevGi].stories.length - 1;
+      renderStoryViewerContent();
+    }
+  }
+}
+
+// Tap/hold interactions — set up once at app init, not on every render
+function setupStoryViewerInteractions() {
+  const viewer = els.storyViewer;
+  if (!viewer) return;
+
+  let holdTimer   = null;
+  let isHolding   = false;
+  let downTime    = 0;
+  let downX       = 0;
+
+  const HOLD_THRESHOLD_MS  = 220; // hold longer than this → pause
+  const TAP_MOVE_TOLERANCE = 12;  // px — ignore drags as taps
+
+  function onDown(e) {
+    // Don't intercept clicks on the controls, reply form, or close button
+    if (e.target.closest('#sv-reply-form, #sv-close, .sv-progress-row, .sv-top')) return;
+    downTime  = Date.now();
+    downX     = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
+    isHolding = false;
+    holdTimer = window.setTimeout(() => {
+      isHolding = true;
+      pauseStoryViewer();
+    }, HOLD_THRESHOLD_MS);
+  }
+
+  function onUp(e) {
+    if (!holdTimer && !isHolding) return;   // pointer never went down on our zone
+    window.clearTimeout(holdTimer);
+    holdTimer = null;
+
+    if (isHolding) {
+      // End of hold → resume
+      resumeStoryViewer();
+      isHolding = false;
+      return;
+    }
+
+    // It was a short tap — ignore if pointer moved too far (e.g. scroll attempt)
+    const upX  = e.clientX ?? e.changedTouches?.[0]?.clientX ?? downX;
+    const moved = Math.abs(upX - downX);
+    if (moved > TAP_MOVE_TOLERANCE) return;
+
+    // Determine tap side
+    const rect   = viewer.getBoundingClientRect();
+    const tapX   = upX - rect.left;
+    const isLeft = tapX < rect.width * 0.35;
+
+    if (isLeft) {
+      goToPreviousStory();
+    } else {
+      advanceStory();
+    }
+  }
+
+  function onCancel() {
+    window.clearTimeout(holdTimer);
+    holdTimer = null;
+    if (isHolding) {
+      resumeStoryViewer();
+      isHolding = false;
+    }
+  }
+
+  // Pointer events cover mouse + touch in modern browsers
+  viewer.addEventListener('pointerdown',   onDown,   { passive: true });
+  viewer.addEventListener('pointerup',     onUp);
+  viewer.addEventListener('pointercancel', onCancel);
+  // touchend fires on iOS when pointerup doesn't
+  viewer.addEventListener('touchend',      onUp,     { passive: true });
+}
+
+function advanceStory() {
+  const sv = state.storyViewer;
+  const group = state.stories[sv.groupIndex];
+  if (!group) { closeStoryViewer(); return; }
+  if (sv.storyIndex < group.stories.length - 1) {
+    sv.storyIndex++;
+    renderStoryViewerContent();
+  } else if (sv.groupIndex < state.stories.length - 1) {
+    let nextGroup = sv.groupIndex + 1;
+    while (nextGroup < state.stories.length && state.stories[nextGroup].stories.length === 0) nextGroup++;
+    if (nextGroup < state.stories.length) {
+      sv.groupIndex = nextGroup;
+      sv.storyIndex = 0;
+      renderStoryViewerContent();
+    } else {
+      closeStoryViewer();
+    }
+  } else {
+    closeStoryViewer();
+  }
+}
+
+function clearStoryTimer() {
+  if (state.storyViewer.timer) { window.clearTimeout(state.storyViewer.timer); state.storyViewer.timer = null; }
+}
+
+function closeStoryViewer() {
+  clearStoryTimer();
+  state.storyViewer.open   = false;
+  state.storyViewer.paused = false;
+  if (state.storyViewer.mediaEl) {
+    state.storyViewer.mediaEl.pause?.();
+    state.storyViewer.mediaEl = null;
+  }
+  els.storyViewer?.classList.remove('sv-paused');
+  els.storyViewer?.classList.add('hidden');
+  if (els.svReplyInput) els.svReplyInput.value = '';
+}
+
+async function handleStoryReply(e) {
+  e.preventDefault();
+  const body = els.svReplyInput?.value.trim();
+  if (!body) return;
+  const group = state.stories[state.storyViewer.groupIndex];
+  const story = group?.stories[state.storyViewer.storyIndex];
+  if (!story) return;
+  try {
+    const res = await api(`/api/stories/${story.id}/reply`, { method: 'POST', body: { body } });
+    if (els.svReplyInput) els.svReplyInput.value = '';
+    closeStoryViewer();
+    toast('Reply sent!', 'success');
+    await loadBootstrap({ preserveConversation: true });
+    if (res.conversation_id) await openConversation(res.conversation_id);
+  } catch (err) { toast(err.message, 'error'); }
+}
