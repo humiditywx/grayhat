@@ -67,9 +67,10 @@ class Config:
     DEBUG = _as_bool(os.getenv('FLASK_DEBUG'), default=False)
     TESTING = False
 
+# Woah there, don't sneak in our SUPER SECRET IMPORTANT TESTING CONFIGS!!! YOU SILLY GOOF :3
 
-class TestConfig(Config):
-    TESTING = True
-    JWT_COOKIE_SECURE = False
-    TOTP_ENCRYPTION_KEY = 'gVJX4d2D9G12fdfMyRjN1w8NAnD-oW1f_3y2pqqfWkw='
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+# class TestConfig(Config):
+#    TESTING = True
+#    JWT_COOKIE_SECURE = False
+#    TOTP_ENCRYPTION_KEY = ''
+#    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
