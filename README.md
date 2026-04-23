@@ -1,6 +1,6 @@
-# Pentastic (previously ExpressMessenger)
+# ExpressMessenger
 
-Pentastic is an open-source effort to create a secure social messaging platform with following feature set for now:
+ExpressMessenger is an open-source effort to create a secure social messaging platform with following feature set for now:
 
 - username/password registration with automatic UUID assignment
 - private conversations
@@ -9,7 +9,7 @@ Pentastic is an open-source effort to create a secure social messaging platform 
 - text messages, editable text messages, file attachments, media uploads, and voice notes
 - browser-based voice and video calling with WebRTC
 - Google Authenticator compatible TOTP account recovery and password reset
-- Vanilla HTML, CSS, and JavaScript frontend with a Material 3 Expressive-inspired interface (planning on upgrading to React)
+- Vanilla HTML, CSS, and JavaScript frontend with a Material 3 Expressive-inspired interface
 
 ## Stack
 
@@ -101,6 +101,7 @@ Calling is browser-to-browser WebRTC. The Flask backend handles signaling only.
 - `Socket.IO` rooms coordinate call presence and peer discovery
 - the browser creates direct peer connections for voice/video media
 - TURN is recommended in production for NAT-restricted networks
+
 ## Security notes
 
 - Passwords are hashed with Werkzeug's `scrypt` password hasher.
