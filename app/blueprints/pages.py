@@ -1,18 +1,25 @@
-from flask import Blueprint, render_template
+import os
+from flask import Blueprint, send_from_directory
 
 pages_bp = Blueprint('pages', __name__)
+
+_DIST = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static', 'dist')
+
+
+def _spa():
+    return send_from_directory(_DIST, 'index.html')
 
 
 @pages_bp.get('/')
 def index():
-    return render_template('index.html', page='home', share_token='', friend_uuid='')
+    return _spa()
 
 
-@pages_bp.get('/g/<share_token>')
+@pages_bp.get('/g/<path:share_token>')
 def group_join_page(share_token: str):
-    return render_template('index.html', page='group', share_token=share_token, friend_uuid='')
+    return _spa()
 
 
-@pages_bp.get('/add/<friend_uuid>')
+@pages_bp.get('/add/<path:friend_uuid>')
 def add_friend_page(friend_uuid: str):
-    return render_template('index.html', page='friend', share_token='', friend_uuid=friend_uuid)
+    return _spa()

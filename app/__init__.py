@@ -47,12 +47,42 @@ def create_app(config_object: type[Config] = Config) -> Flask:
 
     from . import socket_events  # noqa: F401
 
+    # Ensure columns added after initial create_all() are present in the database.
+    # db.create_all() only creates missing tables, not missing columns on existing tables.
+    _run_column_migrations(app)
+
     # Start background thread that purges expired stories every 5 minutes
     if not app.config.get('TESTING'):
         from .services.story_cleanup import start_cleanup_thread
         start_cleanup_thread(app)
 
     return app
+
+
+def _run_column_migrations(app: Flask) -> None:
+    """Add any columns that were introduced after the initial schema creation."""
+    from sqlalchemy import inspect, text
+    with app.app_context():
+        try:
+            inspector = inspect(db.engine)
+            if 'users' not in inspector.get_table_names():
+                return  # fresh install — create_all will handle it
+            existing = {c['name'] for c in inspector.get_columns('users')}
+            needed = []
+            if 'bio' not in existing:
+                needed.append("ALTER TABLE users ADD COLUMN bio TEXT")
+            if 'username_changed_at' not in existing:
+                needed.append("ALTER TABLE users ADD COLUMN username_changed_at JSON NOT NULL DEFAULT '[]'")
+            if needed:
+                with db.engine.connect() as conn:
+                    for stmt in needed:
+                        try:
+                            conn.execute(text(stmt))
+                            conn.commit()
+                        except Exception:
+                            conn.rollback()
+        except Exception:
+            pass  # never block startup
 
 
 def _register_jwt_handlers(app: Flask) -> None:

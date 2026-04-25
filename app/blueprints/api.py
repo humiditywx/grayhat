@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from flask import Blueprint, abort, jsonify, request, send_file
@@ -13,7 +13,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from ..extensions import db, limiter, socketio
-from ..models import Attachment, Conversation, ConversationParticipant, Friendship, Message, PrivateConversationIndex, Story, User
+from ..models import Attachment, Conversation, ConversationParticipant, FriendRequest, Friendship, Message, PrivateConversationIndex, Story, User
 from ..models import utcnow as utcnow_dt
 from ..services.chat import (
     add_friend,
@@ -25,7 +25,7 @@ from ..services.chat import (
     touch_conversation,
 )
 from ..services.security import qr_code_png_bytes, random_token, utc_iso
-from ..services.serializers import public_base_url, serialize_conversation, serialize_friend, serialize_message, serialize_story, serialize_user
+from ..services.serializers import public_base_url, serialize_conversation, serialize_friend, serialize_friend_request, serialize_message, serialize_story, serialize_user
 from ..services.storage import classify_file, save_upload
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -105,10 +105,25 @@ def bootstrap():
         .all()
     )
 
+    # ── Friend requests ───────────────────────────────────────────────────────
+    from sqlalchemy.orm import selectinload as si
+
+    incoming_requests = (
+        FriendRequest.query
+        .filter_by(receiver_id=current_user.id, status='pending')
+        .options(si(FriendRequest.sender), si(FriendRequest.receiver))
+        .all()
+    )
+    outgoing_requests = (
+        FriendRequest.query
+        .filter_by(sender_id=current_user.id, status='pending')
+        .options(si(FriendRequest.sender), si(FriendRequest.receiver))
+        .all()
+    )
+
     # ── Stories ──────────────────────────────────────────────────────────────
     from datetime import timezone as tz
     from collections import defaultdict as dd
-    from sqlalchemy.orm import selectinload as si
 
     now = datetime.now(tz.utc)
     visible_ids = [current_user.id] + friend_ids
@@ -164,6 +179,10 @@ def bootstrap():
         'my_uuid': current_user.id,
         'my_add_link': f'{public_base_url()}/add/{current_user.id}',
         'story_groups': story_groups,
+        'friend_requests': {
+            'incoming': [serialize_friend_request(r, current_user.id) for r in incoming_requests],
+            'outgoing': [serialize_friend_request(r, current_user.id) for r in outgoing_requests],
+        },
     })
 
 
@@ -173,6 +192,17 @@ def my_qr_png():
     payload = f'{public_base_url()}/add/{current_user.id}'
     png = qr_code_png_bytes(payload)
     return send_file(io.BytesIO(png), mimetype='image/png', download_name='my-uuid.png')
+
+
+@api_bp.get('/conversations/<conversation_id>/qr.png')
+@jwt_required()
+def conversation_qr_png(conversation_id: str):
+    conversation = get_conversation_for_user_or_404(current_user.id, conversation_id)
+    if not conversation.public_share_token:
+        return jsonify({'ok': False, 'error': 'No invite link for this group.'}), 404
+    share_url = f'{public_base_url()}/g/{conversation.public_share_token}'
+    png = qr_code_png_bytes(share_url)
+    return send_file(io.BytesIO(png), mimetype='image/png', download_name='group-invite.png')
 
 
 @api_bp.get('/friends')
@@ -202,6 +232,102 @@ def remove_friend(friend_id: str):
     socketio.emit('friend:removed', {'friend_id': current_user.id}, to=f'user:{friend_id}')
     return jsonify({'ok': True})
 
+@api_bp.get('/friends/requests')
+@jwt_required()
+def list_friend_requests():
+    from sqlalchemy.orm import selectinload as _si
+    incoming = (
+        FriendRequest.query
+        .filter_by(receiver_id=current_user.id, status='pending')
+        .options(_si(FriendRequest.sender), _si(FriendRequest.receiver))
+        .all()
+    )
+    outgoing = (
+        FriendRequest.query
+        .filter_by(sender_id=current_user.id, status='pending')
+        .options(_si(FriendRequest.sender), _si(FriendRequest.receiver))
+        .all()
+    )
+    return jsonify({
+        'ok': True,
+        'incoming': [serialize_friend_request(r, current_user.id) for r in incoming],
+        'outgoing': [serialize_friend_request(r, current_user.id) for r in outgoing],
+    })
+
+
+@api_bp.post('/friends/requests/<request_id>/accept')
+@jwt_required()
+def accept_friend_request(request_id: str):
+    from sqlalchemy.orm import selectinload as _si
+    req = db.session.get(
+        FriendRequest, request_id,
+        options=[_si(FriendRequest.sender), _si(FriendRequest.receiver)],
+    )
+    if not req or req.receiver_id != current_user.id or req.status != 'pending':
+        return jsonify({'ok': False, 'error': 'Friend request not found.'}), 404
+
+    sender = req.sender
+    try:
+        _, conversation = add_friend(current_user, sender)
+    except ValueError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
+
+    req.status = 'accepted'
+    db.session.commit()
+
+    full_conv = db.session.get(
+        Conversation, conversation.id,
+        options=[_si(Conversation.participants).selectinload(ConversationParticipant.user), _si(Conversation.messages)],
+    )
+    conv_for_me = serialize_conversation(full_conv, current_user.id)
+    conv_for_sender = serialize_conversation(full_conv, sender.id)
+
+    # Emit to receiver (current_user)
+    socketio.emit('friend:request:accepted', {
+        'request_id': request_id,
+        'friend': serialize_friend(sender, conversation.id),
+        'conversation': conv_for_me,
+    }, to=f'user:{current_user.id}')
+    # Emit to sender
+    socketio.emit('friend:request:accepted', {
+        'request_id': request_id,
+        'friend': serialize_friend(current_user, conversation.id),
+        'conversation': conv_for_sender,
+    }, to=f'user:{sender.id}')
+
+    return jsonify({
+        'ok': True,
+        'friend': serialize_friend(sender, conversation.id),
+        'conversation': conv_for_me,
+    })
+
+
+@api_bp.post('/friends/requests/<request_id>/decline')
+@jwt_required()
+def decline_friend_request(request_id: str):
+    req = FriendRequest.query.filter_by(id=request_id, receiver_id=current_user.id, status='pending').first()
+    if not req:
+        return jsonify({'ok': False, 'error': 'Friend request not found.'}), 404
+    sender_id = req.sender_id
+    db.session.delete(req)
+    db.session.commit()
+    socketio.emit('friend:request:declined', {'request_id': request_id}, to=f'user:{sender_id}')
+    return jsonify({'ok': True})
+
+
+@api_bp.delete('/friends/requests/<request_id>')
+@jwt_required()
+def cancel_friend_request(request_id: str):
+    req = FriendRequest.query.filter_by(id=request_id, sender_id=current_user.id, status='pending').first()
+    if not req:
+        return jsonify({'ok': False, 'error': 'Friend request not found.'}), 404
+    receiver_id = req.receiver_id
+    db.session.delete(req)
+    db.session.commit()
+    socketio.emit('friend:request:cancelled', {'request_id': request_id}, to=f'user:{receiver_id}')
+    return jsonify({'ok': True})
+
+
 @api_bp.post('/friends')
 @jwt_required()
 def create_friendship():
@@ -210,32 +336,79 @@ def create_friendship():
     if not target_id:
         return jsonify({'ok': False, 'error': 'Enter a valid UUID or QR code URL.'}), 400
 
+    if target_id == current_user.id:
+        return jsonify({'ok': False, 'error': 'You cannot add yourself.'}), 400
+
     target = db.session.get(User, target_id)
     if not target:
         return jsonify({'ok': False, 'error': 'That user does not exist.'}), 404
 
-    try:
-        _, conversation = add_friend(current_user, target)
-        db.session.commit()
-    except ValueError as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 400
+    # Check already friends
+    from sqlalchemy import and_
+    existing_friendship = Friendship.query.filter(
+        or_(
+            and_(Friendship.user_a_id == current_user.id, Friendship.user_b_id == target_id),
+            and_(Friendship.user_a_id == target_id, Friendship.user_b_id == current_user.id),
+        )
+    ).first()
+    if existing_friendship:
+        return jsonify({'ok': False, 'error': 'Already friends.'}), 400
 
-    payload = {
-        'friend': serialize_friend(target, conversation.id),
-        'conversation_id': conversation.id,
-        'initiator_user_id': current_user.id,
-    }
-    socketio.emit('friend:added', payload, to=f'user:{current_user.id}')
-    socketio.emit(
-        'friend:added',
-        {
+    # Check if they sent us a request → auto-accept
+    from sqlalchemy.orm import selectinload as _si
+    their_request = FriendRequest.query.filter_by(
+        sender_id=target_id, receiver_id=current_user.id, status='pending'
+    ).first()
+    if their_request:
+        req_id = their_request.id
+        try:
+            _, conversation = add_friend(current_user, target)
+        except ValueError as exc:
+            return jsonify({'ok': False, 'error': str(exc)}), 400
+        their_request.status = 'accepted'
+        db.session.commit()
+        full_conv = db.session.get(
+            Conversation, conversation.id,
+            options=[_si(Conversation.participants).selectinload(ConversationParticipant.user), _si(Conversation.messages)],
+        )
+        conv_for_me = serialize_conversation(full_conv, current_user.id)
+        conv_for_target = serialize_conversation(full_conv, target.id)
+        socketio.emit('friend:request:accepted', {
+            'request_id': req_id,
+            'friend': serialize_friend(target, conversation.id),
+            'conversation': conv_for_me,
+        }, to=f'user:{current_user.id}')
+        socketio.emit('friend:request:accepted', {
+            'request_id': req_id,
             'friend': serialize_friend(current_user, conversation.id),
-            'conversation_id': conversation.id,
-            'initiator_user_id': current_user.id,
-        },
-        to=f'user:{target.id}',
+            'conversation': conv_for_target,
+        }, to=f'user:{target.id}')
+        return jsonify({
+            'ok': True,
+            'friend': serialize_friend(target, conversation.id),
+            'conversation': conv_for_me,
+        })
+
+    # Check if we already sent them a request
+    our_request = FriendRequest.query.filter_by(
+        sender_id=current_user.id, receiver_id=target_id, status='pending'
+    ).first()
+    if our_request:
+        return jsonify({'ok': False, 'error': 'Request already sent.'}), 400
+
+    # Create new friend request
+    req = FriendRequest(sender_id=current_user.id, receiver_id=target_id, status='pending')
+    db.session.add(req)
+    db.session.commit()
+
+    # Reload with relationships
+    req = db.session.get(
+        FriendRequest, req.id,
+        options=[_si(FriendRequest.sender), _si(FriendRequest.receiver)],
     )
-    return jsonify({'ok': True, **payload})
+    serialized_req = serialize_friend_request(req, current_user.id)
+    socketio.emit('friend:request', {'request': serialize_friend_request(req, target_id)}, to=f'user:{target_id}')
+    return jsonify({'ok': True, 'request': serialized_req})
 
 
 @api_bp.post('/friends/scan-image')
@@ -263,28 +436,71 @@ def scan_friend_image():
     if not target:
         return jsonify({'ok': False, 'error': 'That user does not exist.'}), 404
 
-    try:
-        _, conversation = add_friend(current_user, target)
-        db.session.commit()
-    except ValueError as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 400
+    if target_id == current_user.id:
+        return jsonify({'ok': False, 'error': 'You cannot add yourself.'}), 400
 
-    payload = {
-        'friend': serialize_friend(target, conversation.id),
-        'conversation_id': conversation.id,
-        'initiator_user_id': current_user.id,
-    }
-    socketio.emit('friend:added', payload, to=f'user:{current_user.id}')
-    socketio.emit(
-        'friend:added',
-        {
+    from sqlalchemy import and_
+    from sqlalchemy.orm import selectinload as _si
+
+    existing_friendship = Friendship.query.filter(
+        or_(
+            and_(Friendship.user_a_id == current_user.id, Friendship.user_b_id == target_id),
+            and_(Friendship.user_a_id == target_id, Friendship.user_b_id == current_user.id),
+        )
+    ).first()
+    if existing_friendship:
+        return jsonify({'ok': False, 'error': 'Already friends.'}), 400
+
+    their_request = FriendRequest.query.filter_by(
+        sender_id=target_id, receiver_id=current_user.id, status='pending'
+    ).first()
+    if their_request:
+        req_id = their_request.id
+        try:
+            _, conversation = add_friend(current_user, target)
+        except ValueError as exc:
+            return jsonify({'ok': False, 'error': str(exc)}), 400
+        their_request.status = 'accepted'
+        db.session.commit()
+        full_conv = db.session.get(
+            Conversation, conversation.id,
+            options=[_si(Conversation.participants).selectinload(ConversationParticipant.user), _si(Conversation.messages)],
+        )
+        conv_for_me = serialize_conversation(full_conv, current_user.id)
+        conv_for_target = serialize_conversation(full_conv, target.id)
+        socketio.emit('friend:request:accepted', {
+            'request_id': req_id,
+            'friend': serialize_friend(target, conversation.id),
+            'conversation': conv_for_me,
+        }, to=f'user:{current_user.id}')
+        socketio.emit('friend:request:accepted', {
+            'request_id': req_id,
             'friend': serialize_friend(current_user, conversation.id),
-            'conversation_id': conversation.id,
-            'initiator_user_id': current_user.id,
-        },
-        to=f'user:{target.id}',
+            'conversation': conv_for_target,
+        }, to=f'user:{target.id}')
+        return jsonify({
+            'ok': True,
+            'friend': serialize_friend(target, conversation.id),
+            'conversation': conv_for_me,
+        })
+
+    our_request = FriendRequest.query.filter_by(
+        sender_id=current_user.id, receiver_id=target_id, status='pending'
+    ).first()
+    if our_request:
+        return jsonify({'ok': False, 'error': 'Request already sent.'}), 400
+
+    req = FriendRequest(sender_id=current_user.id, receiver_id=target_id, status='pending')
+    db.session.add(req)
+    db.session.commit()
+
+    req = db.session.get(
+        FriendRequest, req.id,
+        options=[_si(FriendRequest.sender), _si(FriendRequest.receiver)],
     )
-    return jsonify({'ok': True, **payload})
+    serialized_req = serialize_friend_request(req, current_user.id)
+    socketio.emit('friend:request', {'request': serialize_friend_request(req, target_id)}, to=f'user:{target_id}')
+    return jsonify({'ok': True, 'request': serialized_req})
 
 
 @api_bp.post('/conversations/private/<friend_id>')
@@ -358,7 +574,20 @@ def create_message(conversation_id: str):
     if len(body) > current_app.config['MESSAGE_MAX_LENGTH']:
         return jsonify({'ok': False, 'error': 'Message is too long.'}), 400
 
-    message = Message(conversation_id=conversation.id, sender_id=current_user.id, message_type='text', body=body)
+    extra = {}
+    reply_to_id = (payload.get('reply_to_id') or '').strip()
+    if reply_to_id:
+        from sqlalchemy.orm import selectinload as _si
+        ref = db.session.get(Message, reply_to_id, options=[_si(Message.sender)])
+        if ref and ref.conversation_id == conversation.id:
+            extra['reply_to'] = {
+                'id': ref.id,
+                'body': (ref.body or '')[:200],
+                'sender_name': ref.sender.username if ref.sender else 'Unknown',
+                'message_type': ref.message_type,
+            }
+
+    message = Message(conversation_id=conversation.id, sender_id=current_user.id, message_type='text', body=body, extra=extra)
     db.session.add(message)
     touch_conversation(conversation)
     db.session.commit()
@@ -425,7 +654,19 @@ def upload_attachment(conversation_id: str):
 
     kind = classify_file(content_type, explicit_type=explicit_type)
     message_type = 'voice' if explicit_type == 'voice' else kind
-    message = Message(conversation_id=conversation.id, sender_id=current_user.id, message_type=message_type, body=body)
+    extra = {}
+    reply_to_id = (request.form.get('reply_to_id') or '').strip()
+    if reply_to_id:
+        from sqlalchemy.orm import selectinload as _si
+        ref = db.session.get(Message, reply_to_id, options=[_si(Message.sender)])
+        if ref and ref.conversation_id == conversation.id:
+            extra['reply_to'] = {
+                'id': ref.id,
+                'body': (ref.body or '')[:200],
+                'sender_name': ref.sender.username if ref.sender else 'Unknown',
+                'message_type': ref.message_type,
+            }
+    message = Message(conversation_id=conversation.id, sender_id=current_user.id, message_type=message_type, body=body, extra=extra)
     db.session.add(message)
     db.session.flush()
 
@@ -692,6 +933,71 @@ def get_user_avatar(user_id: str):
     return send_file(str(storage_path), mimetype=content_type, conditional=True)
 
 
+# ─── Public user profile ─────────────────────────────────────────────────────
+
+@api_bp.get('/users/<user_id>/profile')
+@jwt_required()
+def get_user_profile(user_id: str):
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'ok': False, 'error': 'User not found.'}), 404
+    return jsonify({'ok': True, 'user': serialize_user(user)})
+
+
+# ─── Profile update ──────────────────────────────────────────────────────────
+
+@api_bp.patch('/users/me/profile')
+@jwt_required()
+def update_profile():
+    payload = request.get_json(silent=True) or {}
+    bio = payload.get('bio')
+    if bio is not None:
+        current_user.bio = bio[:300]  # hard cap
+    db.session.commit()
+    return jsonify({'ok': True, 'user': serialize_user(current_user)})
+
+
+@api_bp.patch('/users/me/username')
+@jwt_required()
+def change_username():
+    from datetime import timedelta
+    payload = request.get_json(silent=True) or {}
+    new_username = (payload.get('username') or '').strip()
+    if not new_username:
+        return jsonify({'ok': False, 'error': 'Username is required.'}), 400
+    if len(new_username) < 3 or len(new_username) > 24:
+        return jsonify({'ok': False, 'error': 'Username must be 3–24 characters.'}), 400
+    if not re.match(r'^[A-Za-z0-9_]+$', new_username):
+        return jsonify({'ok': False, 'error': 'Only letters, numbers, and underscores allowed.'}), 400
+
+    # Check 2 changes per 14 days
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(days=14)
+    changes = current_user.username_changed_at or []
+    recent = [c for c in changes if datetime.fromisoformat(c) > window_start]
+    if len(recent) >= 2:
+        return jsonify({'ok': False, 'error': 'You can only change your username twice every 14 days.'}), 429
+
+    # Check uniqueness
+    normalized = new_username.lower()
+    existing = User.query.filter_by(username_normalized=normalized).first()
+    if existing and existing.id != current_user.id:
+        return jsonify({'ok': False, 'error': 'Username already taken.'}), 409
+
+    current_user.username = new_username
+    current_user.username_normalized = normalized
+    current_user.username_changed_at = recent + [now.isoformat()]
+    db.session.commit()
+
+    # Notify friends
+    socketio.emit('user:username_updated', {
+        'user_id': current_user.id,
+        'username': current_user.username,
+    }, to=f'user:{current_user.id}')
+
+    return jsonify({'ok': True, 'user': serialize_user(current_user), 'changes_in_window': len(recent) + 1})
+
+
 # ─── Delete message ──────────────────────────────────────────────────────────
 
 @api_bp.delete('/messages/<message_id>')
@@ -820,6 +1126,46 @@ def leave_conversation(conversation_id: str):
 
 # ─── Stories ─────────────────────────────────────────────────────────────────
 
+def _transcode_video_720p(storage_name: str, storage_path: str) -> tuple[str, str, str]:
+    """
+    Re-encode a video to H.264/AAC at 720p using ffmpeg.
+    Returns (storage_name, storage_path, content_type) — either transcoded or original on failure.
+    """
+    import subprocess, os
+    from pathlib import Path
+    from uuid import uuid4
+
+    out_name = f'{uuid4()}.mp4'
+    out_path = str(Path(storage_path).parent / out_name)
+    try:
+        result = subprocess.run(
+            [
+                'ffmpeg', '-i', storage_path,
+                '-vf', 'scale=-2:720',
+                '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+                '-c:a', 'aac', '-b:a', '128k',
+                '-movflags', '+faststart',
+                '-y', out_path,
+            ],
+            capture_output=True,
+            timeout=180,
+        )
+        if result.returncode == 0 and os.path.exists(out_path):
+            try:
+                os.remove(storage_path)  # delete original
+            except OSError:
+                pass
+            return out_name, out_path, 'video/mp4'
+        # transcoding failed — clean up partial output, keep original
+        try:
+            os.remove(out_path)
+        except OSError:
+            pass
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass  # ffmpeg not installed or timed out — fall back to original
+    return storage_name, storage_path, 'video/mp4'
+
+
 @api_bp.post('/stories')
 @jwt_required()
 def create_story():
@@ -834,6 +1180,10 @@ def create_story():
 
     media_type = 'video' if content_type.startswith('video/') else 'image'
     caption = (request.form.get('caption') or '').strip() or None
+
+    # Transcode videos to 720p H.264 to reduce size and ensure browser compatibility
+    if media_type == 'video':
+        storage_name, storage_path, content_type = _transcode_video_720p(storage_name, storage_path)
 
     from datetime import timedelta
     expires_at = utcnow_dt() + timedelta(hours=24)
@@ -992,7 +1342,14 @@ def reply_to_story(story_id: str):
         sender_id=current_user.id,
         message_type='text',
         body=body,
-        extra={'story_reply': story_id},
+        extra={
+            'story_reply': {
+                'story_id': story_id,
+                'author_username': story.user.username if story.user else 'Someone',
+                'media_url': f'/api/stories/{story_id}/media',
+                'media_type': story.media_type,
+            },
+        },
     )
     db.session.add(message)
     touch_conversation(conversation)

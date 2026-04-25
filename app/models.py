@@ -31,6 +31,10 @@ class User(db.Model, TimestampMixin):
     last_seen_at = db.Column(db.DateTime(timezone=True), nullable=True)
     # profile picture (v1 feature)
     avatar_storage_name = db.Column(db.String(255), nullable=True)
+    # profile bio
+    bio = db.Column(db.Text, nullable=True)
+    # username change history – list of ISO datetime strings
+    username_changed_at = db.Column(db.JSON, nullable=False, default=list)
 
     conversations = db.relationship('ConversationParticipant', back_populates='user', cascade='all, delete-orphan')
     sent_messages = db.relationship('Message', back_populates='sender', cascade='all, delete-orphan')
@@ -50,6 +54,21 @@ class Friendship(db.Model, TimestampMixin):
 
     user_a = db.relationship('User', foreign_keys=[user_a_id])
     user_b = db.relationship('User', foreign_keys=[user_b_id])
+
+
+class FriendRequest(db.Model, TimestampMixin):
+    __tablename__ = 'friend_requests'
+    __table_args__ = (
+        UniqueConstraint('sender_id', 'receiver_id', name='uq_friend_request_pair'),
+        Index('ix_fr_receiver', 'receiver_id'),
+        Index('ix_fr_sender', 'sender_id'),
+    )
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
+    sender_id = db.Column(db.String(36), db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    receiver_id = db.Column(db.String(36), db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    status = db.Column(db.String(16), nullable=False, default='pending')
+    sender = db.relationship('User', foreign_keys=[sender_id])
+    receiver = db.relationship('User', foreign_keys=[receiver_id])
 
 
 class Conversation(db.Model, TimestampMixin):

@@ -24,7 +24,7 @@ def _split_csv(value: str | None) -> list[str]:
 
 
 class Config:
-    APP_NAME = os.getenv('APP_NAME', 'ExpressMessenger')
+    APP_NAME = os.getenv('APP_NAME', 'Pentastic')
     SECRET_KEY = os.getenv('SECRET_KEY', 'development-secret-key-change-this')
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', SECRET_KEY)
     PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
@@ -50,7 +50,7 @@ class Config:
     USERNAME_MIN_LENGTH = int(os.getenv('USERNAME_MIN_LENGTH', '3'))
     USERNAME_MAX_LENGTH = int(os.getenv('USERNAME_MAX_LENGTH', '24'))
 
-    TOTP_ISSUER = os.getenv('TOTP_ISSUER', 'ExpressMessenger')
+    TOTP_ISSUER = os.getenv('TOTP_ISSUER', 'Pentastic')
     TOTP_ENCRYPTION_KEY = os.getenv('TOTP_ENCRYPTION_KEY', '')
     TOTP_VALID_WINDOW = int(os.getenv('TOTP_VALID_WINDOW', '1'))
 
@@ -67,10 +67,9 @@ class Config:
     DEBUG = _as_bool(os.getenv('FLASK_DEBUG'), default=False)
     TESTING = False
 
-# Woah there, don't sneak in our SUPER SECRET IMPORTANT TESTING CONFIGS!!! YOU SILLY GOOF :3
 
-# class TestConfig(Config):
-#    TESTING = True
-#    JWT_COOKIE_SECURE = False
-#    TOTP_ENCRYPTION_KEY = ''
-#    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+class TestConfig(Config):
+    TESTING = True
+    JWT_COOKIE_SECURE = False
+    TOTP_ENCRYPTION_KEY = 'gVJX4d2D9G12fdfMyRjN1w8NAnD-oW1f_3y2pqqfWkw='
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'

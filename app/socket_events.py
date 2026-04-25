@@ -331,21 +331,11 @@ def _forward_signaling(event_name: str, data):
         return
 
     data = data or {}
-    conversation_id = data.get('conversation_id')
     target_user_id = data.get('target_user_id')
-    if not conversation_id or not target_user_id:
-        return
-    if _conversation_for_user(user.id, conversation_id) is None:
+    if not target_user_id:
         return
 
-    socketio.emit(
-        event_name,
-        {
-            'conversation_id': conversation_id,
-            'source_user_id': user.id,
-            'target_user_id': target_user_id,
-            'payload': data.get('payload'),
-            'mode': data.get('mode'),
-        },
-        to=f'user:{target_user_id}',
-    )
+    # Forward all fields except target_user_id, and add from_user_id
+    forwarded = {k: v for k, v in data.items() if k != 'target_user_id'}
+    forwarded['from_user_id'] = user.id
+    socketio.emit(event_name, forwarded, to=f'user:{target_user_id}')

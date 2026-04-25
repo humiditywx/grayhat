@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from ..models import Attachment, Conversation, ConversationParticipant, Friendship, Message, PrivateConversationIndex, User
+from ..models import Attachment, Conversation, ConversationParticipant, FriendRequest, Friendship, Message, PrivateConversationIndex, User
 from .security import utc_iso
 
 
@@ -21,6 +21,9 @@ def serialize_user(user: User) -> dict:
         'username': user.username,
         'totp_enabled': user.totp_enabled,
         'created_at': utc_iso(user.created_at),
+        'avatar_url': f'/api/users/{user.id}/avatar' if user.avatar_storage_name else None,
+        'bio': user.bio or '',
+        'last_seen_at': utc_iso(user.last_seen_at) if user.last_seen_at else None,
     }
 
 
@@ -104,3 +107,19 @@ def serialize_friend(user: User, conversation_id: str | None = None) -> dict:
     base['conversation_id'] = conversation_id
     base['add_link'] = f'{public_base_url()}/add/{user.id}'
     return base
+
+
+def serialize_friend_request(req: FriendRequest, perspective_user_id: str) -> dict:
+    other = req.receiver if req.sender_id == perspective_user_id else req.sender
+    return {
+        'id': req.id,
+        'sender_id': req.sender_id,
+        'receiver_id': req.receiver_id,
+        'direction': 'outgoing' if req.sender_id == perspective_user_id else 'incoming',
+        'other_user': {
+            'id': other.id,
+            'username': other.username,
+            'avatar_url': f'/api/users/{other.id}/avatar' if other.avatar_storage_name else None,
+        },
+        'created_at': utc_iso(req.created_at),
+    }
