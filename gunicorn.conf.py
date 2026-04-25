@@ -1,7 +1,7 @@
 import multiprocessing
 import os
 
-bind = os.getenv('GUNICORN_BIND') or os.getenv('APP_BIND') or os.getenv('APP_PORT') and f"127.0.0.1:{os.getenv('APP_PORT')}" or '127.0.0.1:8000'
+bind = '127.0.0.1:8000'
 workers = 1
 threads = int(os.getenv('GUNICORN_THREADS', '100'))
 worker_class = 'gthread'
