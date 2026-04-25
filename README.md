@@ -9,7 +9,7 @@ Pentastic is an open-source effort to create a secure social messaging platform 
 - text messages, editable text messages, file attachments, media uploads, and voice notes
 - browser-based voice and video calling with WebRTC
 - Google Authenticator compatible TOTP account recovery and password reset
-- Vanilla HTML, CSS, and JavaScript frontend with a Material 3 Expressive-inspired interface (planning on upgrading to React)
+- Responsive React frontend with mobile app like feel
 
 ## Stack
 
@@ -18,45 +18,6 @@ Pentastic is an open-source effort to create a secure social messaging platform 
 - Realtime: Socket.IO rooms for chat events and WebRTC signaling
 - Frontend: server-rendered entrypoint plus Vanilla HTML/CSS/JS
 - Deployment: Gunicorn threaded worker behind Nginx on Ubuntu Server
-
-## Project layout
-
-```text
-pentastic/
-├── app/
-│   ├── blueprints/
-│   │   ├── auth.py
-│   │   ├── api.py
-│   │   └── pages.py
-│   ├── services/
-│   │   ├── chat.py
-│   │   ├── security.py
-│   │   ├── serializers.py
-│   │   └── storage.py
-│   ├── static/
-│   │   ├── css/app.css
-│   │   ├── js/app.js
-│   │   └── sounds/
-│   ├── templates/
-│   │   ├── base.html
-│   │   └── index.html
-│   ├── __init__.py
-│   ├── config.py
-│   ├── extensions.py
-│   ├── models.py
-│   └── socket_events.py
-├── deploy/
-│   └── install_ubuntu_24_04.sh
-├── scripts/
-│   └── generate_secrets.py
-├── uploads/
-├── gunicorn.conf.py
-├── requirements.txt
-├── run.py
-├── wsgi.py
-├── README.md
-└── DEPLOYMENT.md
-```
 
 ## Core behavior
 
@@ -158,77 +119,6 @@ python run.py
 ```
 
 Open the app on `http://127.0.0.1:5000`.
-
-## Main HTTP routes
-
-### Page routes
-
-- `GET /` home entrypoint
-- `GET /g/<share_token>` shared public-group entrypoint
-- `GET /add/<friend_uuid>` shared add-friend entrypoint
-
-### Authentication
-
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
-- `POST /api/auth/totp/setup`
-- `POST /api/auth/totp/confirm`
-- `POST /api/auth/password-reset`
-- `POST /api/auth/password-change`
-
-### Friend and chat API
-
-- `GET /api/bootstrap`
-- `GET /api/users/me/qr.png`
-- `GET /api/friends`
-- `POST /api/friends`
-- `POST /api/friends/scan-image`
-- `POST /api/conversations/private/<friend_id>`
-- `GET /api/conversations`
-- `GET /api/conversations/<conversation_id>/messages`
-- `POST /api/conversations/<conversation_id>/messages`
-- `PATCH /api/messages/<message_id>`
-- `POST /api/conversations/<conversation_id>/attachments`
-- `GET /api/attachments/<attachment_id>`
-- `POST /api/conversations/groups`
-- `GET /api/groups/<share_token>/public`
-- `POST /api/groups/join/<share_token>`
-- `POST /api/conversations/<conversation_id>/read`
-
-## Socket events
-
-Client emits:
-
-- `conversation:join`
-- `conversation:leave`
-- `call:start`
-- `call:join`
-- `call:leave`
-- `call:decline`
-- `webrtc:offer`
-- `webrtc:answer`
-- `webrtc:ice-candidate`
-- `webrtc:hangup`
-
-Server emits:
-
-- `socket:ready`
-- `conversation:joined`
-- `conversation:updated`
-- `message:new`
-- `message:updated`
-- `friend:added`
-- `call:incoming`
-- `call:participants`
-- `call:participant-joined`
-- `call:participant-left`
-- `call:declined`
-- `webrtc:offer`
-- `webrtc:answer`
-- `webrtc:ice-candidate`
-- `webrtc:hangup`
 
 ## Production deployment
 
