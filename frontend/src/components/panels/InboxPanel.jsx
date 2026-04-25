@@ -2,7 +2,6 @@ import { useState } from 'react'
 import Avatar from '../common/Avatar.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { acceptFriendRequest, declineFriendRequest, cancelFriendRequest } from '../../api.js'
-import AddFriendDialog from '../dialogs/AddFriendDialog.jsx'
 
 function fmtTime(iso) {
   if (!iso) return ''
@@ -14,7 +13,7 @@ function fmtTime(iso) {
   return d.toLocaleDateString()
 }
 
-export default function InboxPanel() {
+export default function InboxPanel({ hideHeader = false }) {
   const { state, dispatch, toast } = useApp()
   const [tab, setTab] = useState('received')
   const [busy, setBusy] = useState(null) // requestId being processed
@@ -69,15 +68,17 @@ export default function InboxPanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <div className="panel-header">
-        <span className="panel-title">Inbox</span>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}
-        >
-          + Add Friend
-        </button>
-      </div>
+      {!hideHeader && (
+        <div className="panel-header">
+          <span className="panel-title">Inbox</span>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}
+          >
+            + Add Friend
+          </button>
+        </div>
+      )}
 
       {/* Tab pills */}
       <div className="inbox-tabs">
@@ -168,7 +169,6 @@ export default function InboxPanel() {
         )}
       </div>
 
-      {state.addFriendOpen && <AddFriendDialog onClose={() => dispatch({ type: 'CLOSE_DIALOG', key: 'addFriendOpen' })} />}
     </div>
   )
 }

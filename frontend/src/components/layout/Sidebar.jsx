@@ -4,7 +4,6 @@ import Avatar from '../common/Avatar.jsx'
 import StoryBar from '../stories/StoryBar.jsx'
 import StoryViewer from '../stories/StoryViewer.jsx'
 import InboxPanel from '../panels/InboxPanel.jsx'
-import GroupsPanel from '../panels/GroupsPanel.jsx'
 import ProfilePanel from '../panels/ProfilePanel.jsx'
 import AddFriendDialog from '../dialogs/AddFriendDialog.jsx'
 import CreateGroupDialog from '../dialogs/CreateGroupDialog.jsx'
@@ -27,7 +26,6 @@ function parseScannedValue(val) {
   if (addMatch) return { kind: 'friend', id: addMatch[1] }
   const groupMatch = val.match(/\/g\/([A-Za-z0-9_-]+)/)
   if (groupMatch) return { kind: 'group', token: groupMatch[1], url: val }
-  // raw UUID → treat as friend id
   if (/^[0-9a-f-]{36}$/i.test(val.trim())) return { kind: 'friend', id: val.trim() }
   return null
 }
@@ -134,7 +132,6 @@ function CameraActionModal({ file, onClose, dispatch, toast, conversations }) {
 
         {view === 'options' && (
           <>
-            {/* Preview */}
             <div className="camera-preview">
               {isVideo
                 ? <video src={objectUrl} controls style={{ width: '100%', borderRadius: 'var(--r-md)' }} />
@@ -142,7 +139,6 @@ function CameraActionModal({ file, onClose, dispatch, toast, conversations }) {
               }
             </div>
 
-            {/* Options */}
             <div className="camera-options">
               <button className="camera-option-btn" onClick={handleStory} disabled={busy}>
                 <div className="camera-option-icon" style={{ background: 'linear-gradient(135deg, #E879F9, var(--primary))' }}>
@@ -223,59 +219,163 @@ export default function Sidebar({ mobileHidden }) {
   const { state, dispatch, toast } = useApp()
   const [storyGroupIndex, setStoryGroupIndex] = useState(null)
   const [cameraFile, setCameraFile] = useState(null)
+  const [search, setSearch] = useState('')
+  const [chatSubView, setChatSubView] = useState('list') // 'list' | 'inbox'
   const cameraInputRef = useRef(null)
 
   const panel = state.panel
   const selId = state.selectedConvId
 
-  const chats = state.conversations
-    .filter((c) => c.kind === 'private')
-    .sort((a, b) => {
-      const ta = a.last_message_at ? new Date(a.last_message_at) : new Date(a.created_at)
-      const tb = b.last_message_at ? new Date(b.last_message_at) : new Date(b.created_at)
-      return tb - ta
-    })
+  const allConvs = state.conversations.slice().sort((a, b) => {
+    const ta = a.last_message_at ? new Date(a.last_message_at) : new Date(a.created_at)
+    const tb = b.last_message_at ? new Date(b.last_message_at) : new Date(b.created_at)
+    return tb - ta
+  })
+
+  const filteredConvs = search.trim()
+    ? allConvs.filter((c) => c.title?.toLowerCase().includes(search.toLowerCase()))
+    : allConvs
+
+  const inboxCount = (state.friendRequests?.incoming || []).length
 
   const handleCameraCapture = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     setCameraFile(file)
-    // Reset input so same file can be selected again
     e.target.value = ''
   }
 
-  const inboxCount = (state.friendRequests?.incoming || []).length
+  const goToChats = () => {
+    dispatch({ type: 'SET_PANEL', panel: 'chats' })
+    setChatSubView('list')
+  }
 
   return (
     <>
       <div className={`sidebar${mobileHidden ? ' hidden-mobile' : ''}`}>
         {/* Logo header */}
         <div className="sidebar-header">
-          <span className="sidebar-logo">Pentastic</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {panel === 'chats' && (
-              <button className="btn-icon" title="New direct message" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}>
+          {panel === 'chats' && chatSubView === 'inbox' ? (
+            <>
+              <button className="btn-icon" onClick={() => setChatSubView('list')} title="Back to chats">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                  <polyline points="15 18 9 12 15 6"/>
                 </svg>
               </button>
-            )}
-          </div>
+              <span className="sidebar-logo" style={{ flex: 1 }}>Inbox</span>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}
+              >
+                + Add Friend
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="sidebar-logo">Pentastic</span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {panel === 'chats' && (
+                  <>
+                    <button className="btn-icon" title="New direct message" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                      </svg>
+                    </button>
+                    <button className="btn-icon" title="New group" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'createGroupOpen' })}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 010 7.75"/>
+                        <line x1="19" y1="8" x2="19" y2="14"/>
+                        <line x1="22" y1="11" x2="16" y2="11"/>
+                      </svg>
+                    </button>
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Panel content */}
-        {panel === 'chats' && (
+        {/* Chats panel */}
+        {panel === 'chats' && chatSubView === 'list' && (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
             <StoryBar onOpenViewer={(idx) => setStoryGroupIndex(idx)} />
 
-            <div className="conv-list-header">Messages</div>
+            {/* Search bar */}
+            <div className="chat-search-wrap">
+              <div className="chat-search-inner">
+                <svg className="chat-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input
+                  className="chat-search"
+                  type="text"
+                  placeholder="Search chats…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                {search && (
+                  <button className="chat-search-clear" onClick={() => setSearch('')}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="sidebar-content">
-              {chats.length === 0 && (
-                <div style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 'var(--text-sm)', padding: '32px 16px' }}>
-                  No chats yet.<br />Add a friend to start messaging!
+              {/* Pinned inbox item */}
+              {!search && (
+                <div
+                  className="conv-item"
+                  onClick={() => setChatSubView('inbox')}
+                >
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <div className="inbox-pinned-avatar">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+                        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <line x1="19" y1="8" x2="19" y2="14"/>
+                        <line x1="22" y1="11" x2="16" y2="11"/>
+                      </svg>
+                    </div>
+                    {inboxCount > 0 && (
+                      <span style={{
+                        position: 'absolute', bottom: 0, right: 0,
+                        width: 10, height: 10, borderRadius: '50%',
+                        background: '#EF4444', border: '2px solid var(--surface)',
+                      }} />
+                    )}
+                  </div>
+                  <div className="conv-item-info">
+                    <div className="conv-item-top">
+                      <span className="conv-item-name">Friend Requests</span>
+                      {inboxCount > 0 && (
+                        <span className="conv-item-time" style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                          {inboxCount} new
+                        </span>
+                      )}
+                    </div>
+                    <div className="conv-item-preview">
+                      {inboxCount > 0
+                        ? `${inboxCount} pending request${inboxCount > 1 ? 's' : ''}`
+                        : 'No pending requests'}
+                    </div>
+                  </div>
                 </div>
               )}
-              {chats.map((c) => {
+
+              {/* All conversations: private + groups, sorted by recency */}
+              {filteredConvs.length === 0 && (
+                <div style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 'var(--text-sm)', padding: '32px 16px' }}>
+                  {search ? 'No results.' : <span>No chats yet.<br />Add a friend to start messaging!</span>}
+                </div>
+              )}
+              {filteredConvs.map((c) => {
+                const isGroup = c.kind === 'group'
                 const partner = c.partner
                 const online = partner && state.onlineUsers.has(partner.id)
                 const typing = Object.values(state.typingUsers[c.id] || {})
@@ -286,8 +386,16 @@ export default function Sidebar({ mobileHidden }) {
                     onClick={() => dispatch({ type: 'SELECT_CONV', convId: c.id })}
                   >
                     <div style={{ position: 'relative' }}>
-                      <Avatar user={partner} size="md" />
-                      {online && <span className="online-dot" />}
+                      {isGroup ? (
+                        <div className="avatar avatar-md" style={{ background: 'linear-gradient(135deg, var(--primary-light), var(--primary))', color: '#fff', fontSize: 18, fontWeight: 700, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {c.icon_url
+                            ? <img src={c.icon_url} alt={c.title} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                            : c.title?.[0]?.toUpperCase() || 'G'}
+                        </div>
+                      ) : (
+                        <Avatar user={partner} size="md" />
+                      )}
+                      {!isGroup && online && <span className="online-dot" />}
                     </div>
                     <div className="conv-item-info">
                       <div className="conv-item-top">
@@ -296,8 +404,8 @@ export default function Sidebar({ mobileHidden }) {
                       </div>
                       <div className="conv-item-preview">
                         {typing.length
-                          ? <span style={{ color:'var(--primary)',fontStyle:'italic' }}>{typing[0]} is typing…</span>
-                          : c.last_message_preview || 'Start a conversation'}
+                          ? <span style={{ color: 'var(--primary)', fontStyle: 'italic' }}>{typing[0]} is typing…</span>
+                          : c.last_message_preview || (isGroup ? `${c.member_count ?? ''} members`.trim() : 'Start a conversation')}
                       </div>
                     </div>
                   </div>
@@ -307,28 +415,14 @@ export default function Sidebar({ mobileHidden }) {
           </div>
         )}
 
-        {panel === 'inbox'   && <InboxPanel />}
-        {panel === 'groups'  && <GroupsPanel />}
+        {panel === 'chats' && chatSubView === 'inbox' && <InboxPanel hideHeader />}
         {panel === 'profile' && <ProfilePanel />}
 
-        {/* Bottom nav — Chats | Inbox | [Camera] | Groups | Profile */}
+        {/* Bottom nav — Chats | [Camera] | Profile */}
         <nav className="sidebar-nav">
-          <button className={`nav-tab${panel === 'chats' ? ' active' : ''}`} onClick={() => dispatch({ type: 'SET_PANEL', panel: 'chats' })}>
+          <button className={`nav-tab${panel === 'chats' ? ' active' : ''}`} onClick={goToChats}>
             <ChatIcon active={panel === 'chats'} />
             Chats
-          </button>
-          <button className={`nav-tab${panel === 'inbox' ? ' active' : ''}`} onClick={() => dispatch({ type: 'SET_PANEL', panel: 'inbox' })} style={{ position: 'relative' }}>
-            <InboxIcon active={panel === 'inbox'} />
-            Inbox
-            {inboxCount > 0 && (
-              <span style={{
-                position: 'absolute', top: 6, right: 8,
-                background: '#EF4444', color: '#fff',
-                borderRadius: '9999px', fontSize: 9, fontWeight: 700,
-                minWidth: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                padding: '0 3px',
-              }}>{inboxCount}</span>
-            )}
           </button>
 
           {/* Center camera button */}
@@ -345,7 +439,6 @@ export default function Sidebar({ mobileHidden }) {
             </div>
             Camera
           </button>
-          {/* Hidden camera input — capture="environment" forces back camera on Android/iOS */}
           <input
             ref={cameraInputRef}
             type="file"
@@ -355,10 +448,6 @@ export default function Sidebar({ mobileHidden }) {
             onChange={handleCameraCapture}
           />
 
-          <button className={`nav-tab${panel === 'groups' ? ' active' : ''}`} onClick={() => dispatch({ type: 'SET_PANEL', panel: 'groups' })}>
-            <GroupsIcon active={panel === 'groups'} />
-            Groups
-          </button>
           <button className={`nav-tab${panel === 'profile' ? ' active' : ''}`} onClick={() => dispatch({ type: 'SET_PANEL', panel: 'profile' })}>
             <div className={`nav-avatar-wrap${panel === 'profile' ? ' active' : ''}`}>
               <Avatar user={state.me} size="xs" />
@@ -396,30 +485,6 @@ function ChatIcon({ active }) {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
       <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-    </svg>
-  )
-}
-function InboxIcon({ active }) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-      <circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
-    </svg>
-  )
-}
-function GroupsIcon({ active }) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-      <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-    </svg>
-  )
-}
-function ProfileIcon({ active }) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-      <circle cx="12" cy="7" r="4"/>
     </svg>
   )
 }

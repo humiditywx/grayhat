@@ -531,6 +531,53 @@ a { color: var(--primary); text-decoration: none; }
 .story-add-btn:hover { background: var(--primary-dark, #7c22d4); }
 
 /* ── Conversation list ───────────────────────────────────── */
+/* Chat search bar */
+.chat-search-wrap {
+  padding: 0 12px 8px;
+  flex-shrink: 0;
+}
+.chat-search-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--hover);
+  border: 1px solid transparent;
+  border-radius: var(--r-full);
+  padding: 0 12px;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.chat-search-inner:focus-within {
+  border-color: var(--primary);
+  background: var(--surface);
+}
+.chat-search-icon { color: var(--text-3); flex-shrink: 0; }
+.chat-search {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 0;
+  font-size: var(--text-sm);
+  color: var(--text);
+  outline: none;
+}
+.chat-search::placeholder { color: var(--text-3); }
+.chat-search-clear {
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: none; cursor: pointer;
+  color: var(--text-3); padding: 2px; border-radius: 9999px;
+  flex-shrink: 0;
+}
+.chat-search-clear:hover { color: var(--text); background: var(--hover); }
+
+/* Inbox pinned avatar in chat list */
+.inbox-pinned-avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #A855F7, var(--primary));
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
 .conv-list-header {
   padding: 4px 16px 8px;
   font-size: var(--text-xs);
