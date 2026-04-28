@@ -1,8 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useCallback } from 'react'
 import { io } from 'socket.io-client'
 import { useApp } from './AppContext.jsx'
-import { useSounds } from '../hooks/useSounds.js'
-
 const Ctx = createContext(null)
 
 const msgHandlers = new Map() // convId → (msg) => void
@@ -11,7 +9,6 @@ const eventBus = new Map()   // event name → Set<handler>
 
 export function SocketProvider({ children }) {
   const { state, dispatch, toast } = useApp()
-  const { play } = useSounds()
   const socketRef = useRef(null)
   const selectedConvIdRef = useRef(null)
   const meIdRef = useRef(null)
@@ -63,7 +60,6 @@ export function SocketProvider({ children }) {
       })
       // Play receive sound for ALL incoming messages from other people
       if (msg.sender?.id !== meIdRef.current) {
-        play('messageReceive')
         // Only show the banner for background (non-active) conversations
         if (msg.conversation_id !== selectedConvIdRef.current) {
           eventBus.get('message:new:background')?.forEach((h) => h(msg))

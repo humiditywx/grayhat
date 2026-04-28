@@ -12,12 +12,10 @@ import CallOverlay from './components/calls/CallOverlay.jsx'
 import UserProfilePage from './components/common/UserProfilePage.jsx'
 import MessageNotificationBanner from './components/common/MessageNotificationBanner.jsx'
 import FriendRequestBanner from './components/common/FriendRequestBanner.jsx'
-import { useSounds } from './hooks/useSounds.js'
 import { authMe, bootstrap, joinGroup, sendFriendRequest } from './api.js'
 
 function AppInner() {
   const { state, dispatch, toast } = useApp()
-  const { play, stopAllCallSounds } = useSounds()
 
   // Parse initial route action from URL
   useEffect(() => {
@@ -66,7 +64,6 @@ function AppInner() {
           if (data.friend) {
             dispatch({ type: 'ADD_FRIEND', friend: data.friend })
             if (data.conversation) dispatch({ type: 'ADD_CONVERSATION', conv: data.conversation })
-            play('friendAdded')
             toast(`${data.friend.username} added!`, 'success')
           } else if (data.request) {
             dispatch({ type: 'ADD_OUTGOING_REQUEST', request: data.request })

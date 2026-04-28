@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import Avatar from '../common/Avatar.jsx'
-import { postStoryWithProgress, getStories } from '../../api.js'
+import { postStoryWithProgress } from '../../api.js'
 
 // SVG circle math for the progress ring
 const RING_R = 23          // radius inside a 52×52 viewBox (center 26,26)
@@ -37,7 +37,7 @@ function UploadRing({ progress }) {
 }
 
 export default function StoryBar({ onOpenViewer }) {
-  const { state, dispatch, toast } = useApp()
+  const { state, toast } = useApp()
   const storyInputRef = useRef(null)
   const [seenIds, setSeenIds] = useState(new Set())
   const [uploadProgress, setUploadProgress] = useState(null) // null=idle, 0-100=uploading
@@ -50,8 +50,6 @@ export default function StoryBar({ onOpenViewer }) {
     setUploadProgress(0)
     try {
       await postStoryWithProgress(fd, setUploadProgress)
-      const data = await getStories()
-      dispatch({ type: 'REFRESH_STORIES', stories: data.story_groups || [] })
       toast('Story posted!', 'success')
     } catch (err) {
       toast(err.message, 'error')

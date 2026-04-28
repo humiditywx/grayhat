@@ -13,7 +13,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from ..extensions import db, limiter, socketio
-from ..models import Attachment, Conversation, ConversationParticipant, FriendRequest, Friendship, Message, PrivateConversationIndex, Story, User
+from ..models import Attachment, Conversation, ConversationParticipant, FriendRequest, Friendship, Message, PrivateConversationIndex, Story, StoryView, User
 from ..models import utcnow as utcnow_dt
 from ..services.chat import (
     add_friend,
@@ -26,6 +26,7 @@ from ..services.chat import (
 )
 from ..services.security import qr_code_png_bytes, random_token, utc_iso
 from ..services.serializers import public_base_url, serialize_conversation, serialize_friend, serialize_friend_request, serialize_message, serialize_story, serialize_user
+from ..services.serializers import _preview_from_message
 from ..services.storage import classify_file, save_upload
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -66,6 +67,24 @@ def _extract_uuid(value: str) -> str | None:
         return None
 
 
+def _clear_stale_friend_requests_between(user_id: str, target_id: str) -> None:
+    stale_requests = (
+        FriendRequest.query
+        .filter(
+            or_(
+                (FriendRequest.sender_id == user_id) & (FriendRequest.receiver_id == target_id),
+                (FriendRequest.sender_id == target_id) & (FriendRequest.receiver_id == user_id),
+            ),
+            FriendRequest.status != 'pending',
+        )
+        .all()
+    )
+    for req in stale_requests:
+        db.session.delete(req)
+    if stale_requests:
+        db.session.flush()
+
+
 def _emit_conversation_update(conversation: Conversation, event_name: str, payload: dict) -> None:
     room = f'conversation:{conversation.id}'
     socketio.emit(event_name, payload, to=room)
@@ -98,12 +117,37 @@ def bootstrap():
         .filter(ConversationParticipant.user_id == current_user.id)
         .options(
             selectinload(Conversation.participants).selectinload(ConversationParticipant.user),
-            selectinload(Conversation.messages),
             selectinload(Conversation.private_index),
         )
         .order_by(Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc())
         .all()
     )
+
+    # Batch-load the single last message per conversation — one query, N rows max.
+    # Avoids loading every message ever sent across all conversations (was O(total messages)).
+    from sqlalchemy import func, and_ as sa_and
+    conv_ids = [c.id for c in conversations]
+    preview_map: dict[str, str] = {}
+    if conv_ids:
+        last_at_subq = (
+            db.session.query(
+                Message.conversation_id,
+                func.max(Message.created_at).label('last_at'),
+            )
+            .filter(Message.conversation_id.in_(conv_ids))
+            .group_by(Message.conversation_id)
+            .subquery('last_at')
+        )
+        last_msgs = (
+            db.session.query(Message)
+            .join(last_at_subq, sa_and(
+                Message.conversation_id == last_at_subq.c.conversation_id,
+                Message.created_at == last_at_subq.c.last_at,
+            ))
+            .all()
+        )
+        for m in last_msgs:
+            preview_map[m.conversation_id] = _preview_from_message(m)
 
     # ── Friend requests ───────────────────────────────────────────────────────
     from sqlalchemy.orm import selectinload as si
@@ -174,7 +218,7 @@ def bootstrap():
         'ok': True,
         'user': serialize_user(current_user),
         'friends': friend_payload,
-        'conversations': [serialize_conversation(item, current_user.id) for item in conversations],
+        'conversations': [serialize_conversation(c, current_user.id, preview=preview_map.get(c.id, '')) for c in conversations],
         'ice_servers': _ice_servers(),
         'my_uuid': current_user.id,
         'my_add_link': f'{public_base_url()}/add/{current_user.id}',
@@ -227,6 +271,13 @@ def remove_friend(friend_id: str):
     if not friendship:
         return jsonify({'ok': False, 'error': 'Friendship not found.'}), 404
     db.session.delete(friendship)
+    # Clean up any friend requests between these two users (both directions)
+    FriendRequest.query.filter(
+        or_(
+            (FriendRequest.sender_id == current_user.id) & (FriendRequest.receiver_id == friend_id),
+            (FriendRequest.sender_id == friend_id) & (FriendRequest.receiver_id == current_user.id),
+        )
+    ).delete(synchronize_session=False)
     db.session.commit()
     socketio.emit('friend:removed', {'friend_id': friend_id}, to=f'user:{current_user.id}')
     socketio.emit('friend:removed', {'friend_id': current_user.id}, to=f'user:{friend_id}')
@@ -272,7 +323,7 @@ def accept_friend_request(request_id: str):
     except ValueError as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 400
 
-    req.status = 'accepted'
+    db.session.delete(req)
     db.session.commit()
 
     full_conv = db.session.get(
@@ -365,7 +416,7 @@ def create_friendship():
             _, conversation = add_friend(current_user, target)
         except ValueError as exc:
             return jsonify({'ok': False, 'error': str(exc)}), 400
-        their_request.status = 'accepted'
+        db.session.delete(their_request)
         db.session.commit()
         full_conv = db.session.get(
             Conversation, conversation.id,
@@ -389,12 +440,14 @@ def create_friendship():
             'conversation': conv_for_me,
         })
 
-    # Check if we already sent them a request
+    # Check if we already sent them a request.
     our_request = FriendRequest.query.filter_by(
         sender_id=current_user.id, receiver_id=target_id, status='pending'
     ).first()
     if our_request:
         return jsonify({'ok': False, 'error': 'Request already sent.'}), 400
+
+    _clear_stale_friend_requests_between(current_user.id, target_id)
 
     # Create new friend request
     req = FriendRequest(sender_id=current_user.id, receiver_id=target_id, status='pending')
@@ -460,7 +513,7 @@ def scan_friend_image():
             _, conversation = add_friend(current_user, target)
         except ValueError as exc:
             return jsonify({'ok': False, 'error': str(exc)}), 400
-        their_request.status = 'accepted'
+        db.session.delete(their_request)
         db.session.commit()
         full_conv = db.session.get(
             Conversation, conversation.id,
@@ -489,6 +542,8 @@ def scan_friend_image():
     ).first()
     if our_request:
         return jsonify({'ok': False, 'error': 'Request already sent.'}), 400
+
+    _clear_stale_friend_requests_between(current_user.id, target_id)
 
     req = FriendRequest(sender_id=current_user.id, receiver_id=target_id, status='pending')
     db.session.add(req)
@@ -1365,3 +1420,47 @@ def reply_to_story(story_id: str):
     socketio.emit('conversation:updated', {'conversation_id': conversation.id}, to=f'user:{story.user_id}')
     socketio.emit('conversation:updated', {'conversation_id': conversation.id}, to=f'user:{current_user.id}')
     return jsonify({'ok': True, 'conversation_id': conversation.id})
+
+
+@api_bp.post('/stories/<story_id>/view')
+@jwt_required()
+def record_story_view(story_id: str):
+    story = db.session.get(Story, story_id)
+    if not story:
+        abort(404)
+    # Never record own views
+    if story.user_id == current_user.id:
+        return jsonify({'ok': True})
+    existing = StoryView.query.filter_by(story_id=story_id, viewer_id=current_user.id).first()
+    if not existing:
+        db.session.add(StoryView(story_id=story_id, viewer_id=current_user.id))
+        db.session.commit()
+    return jsonify({'ok': True})
+
+
+@api_bp.get('/stories/<story_id>/views')
+@jwt_required()
+def get_story_views(story_id: str):
+    from sqlalchemy.orm import selectinload as si
+    story = db.session.get(Story, story_id)
+    if not story or story.user_id != current_user.id:
+        abort(403)
+    views = (
+        StoryView.query
+        .filter_by(story_id=story_id)
+        .options(si(StoryView.viewer))
+        .order_by(StoryView.viewed_at.desc())
+        .all()
+    )
+    return jsonify({
+        'ok': True,
+        'views': [
+            {
+                'viewer_id': v.viewer_id,
+                'username': v.viewer.username if v.viewer else 'Unknown',
+                'avatar_url': f'/api/users/{v.viewer_id}/avatar' if (v.viewer and v.viewer.avatar_storage_name) else None,
+                'viewed_at': utc_iso(v.viewed_at),
+            }
+            for v in views
+        ],
+    })

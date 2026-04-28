@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { sendMessage, sendAttachment } from '../../api.js'
 import { useSocket } from '../../context/SocketContext.jsx'
-import { useSounds } from '../../hooks/useSounds.js'
 
 export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
   const [text, setText] = useState('')
@@ -14,7 +13,6 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
   const chunksRef = useRef([])
   const typingTimerRef = useRef(null)
   const { startTyping, stopTyping } = useSocket()
-  const { play } = useSounds()
 
   const autoResize = () => {
     const el = textareaRef.current
@@ -55,7 +53,6 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
       } else {
         result = await sendMessage(convId, body, replyTo?.id)
       }
-      play('messageSend')
       setText('')
       setFile(null)
       onCancelReply?.()
@@ -68,7 +65,7 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
     } finally {
       setSending(false)
     }
-  }, [busy, text, file, convId, replyTo, play, stopTyping, onCancelReply, onSent])
+  }, [busy, text, file, convId, replyTo, stopTyping, onCancelReply, onSent])
 
   const handleKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -92,7 +89,6 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
         if (replyTo) fd.append('reply_to_id', replyTo.id)
         try {
           const result = await sendAttachment(convId, fd)
-          play('voiceSend')
           if (result?.message) onSent?.(result.message)
         } catch (err) {
           alert(err.message)
@@ -103,7 +99,6 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
       mr.start()
       recorderRef.current = mr
       setRecording(true)
-      play('voiceRecordStart')
     } catch {
       alert('Could not access microphone.')
     }

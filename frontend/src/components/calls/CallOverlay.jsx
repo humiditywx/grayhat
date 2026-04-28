@@ -2,8 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Avatar from '../common/Avatar.jsx'
 import { useCall } from '../../context/CallContext.jsx'
 import { useApp } from '../../context/AppContext.jsx'
-import { useSounds } from '../../hooks/useSounds.js'
-
 function fmt(ms) {
   const s = Math.floor(ms / 1000)
   const m = Math.floor(s / 60)
@@ -19,37 +17,21 @@ export default function CallOverlay() {
     localVideoRef, localStreamRef, remoteRefs, dispatch,
   } = useCall()
   const { state } = useApp()
-  const { play, stop, stopAllCallSounds } = useSounds()
-
-  const leaveCall = () => { play('callEnd'); _leaveCall() }
+  const leaveCall = () => { _leaveCall() }
   const [elapsed, setElapsed] = useState(0)
   const [speakerOn, setSpeakerOn] = useState(false)
   const [spotlightUserId, setSpotlightUserId] = useState(null)
   const dialTimerRef = useRef(null)
-  const connectingAudioRef = useRef(null)
 
-  // Phase sounds + dialing → ringing timer
+  // Dialing → ringing timer
   useEffect(() => {
     if (!call.active) return
     if (call.callPhase === 'dialing') {
-      connectingAudioRef.current = play('connectingRtc')
       dialTimerRef.current = setTimeout(() => {
         dispatch({ type: 'SET_CALL_PHASE', phase: 'ringing' })
       }, 3500)
-      return () => {
-        clearTimeout(dialTimerRef.current)
-        if (connectingAudioRef.current) {
-          connectingAudioRef.current.pause()
-          connectingAudioRef.current.currentTime = 0
-          connectingAudioRef.current = null
-        }
-      }
+      return () => clearTimeout(dialTimerRef.current)
     }
-    if (call.callPhase === 'ringing') {
-      play('callRingback', { loop: true })
-      return () => stop('callRingback')
-    }
-    if (call.callPhase === 'connected') stopAllCallSounds()
   }, [call.callPhase, call.active]) // eslint-disable-line
 
   // Elapsed timer
@@ -59,16 +41,9 @@ export default function CallOverlay() {
     return () => clearInterval(id)
   }, [call.active, call.callPhase, call.startTime])
 
-  // Stop all sounds on call end
+  // Clear dialing timer on call end
   useEffect(() => {
-    if (!call.active) {
-      stopAllCallSounds()
-      clearTimeout(dialTimerRef.current)
-      if (connectingAudioRef.current) {
-        connectingAudioRef.current.pause()
-        connectingAudioRef.current = null
-      }
-    }
+    if (!call.active) clearTimeout(dialTimerRef.current)
   }, [call.active]) // eslint-disable-line
 
   // Speaker toggle — route audio output on all remote video elements

@@ -60,22 +60,41 @@ def create_app(config_object: type[Config] = Config) -> Flask:
 
 
 def _run_column_migrations(app: Flask) -> None:
-    """Add any columns that were introduced after the initial schema creation."""
+    """Add any columns/indexes introduced after the initial schema creation."""
     from sqlalchemy import inspect, text
     with app.app_context():
         try:
             inspector = inspect(db.engine)
-            if 'users' not in inspector.get_table_names():
-                return  # fresh install — create_all will handle it
-            existing = {c['name'] for c in inspector.get_columns('users')}
-            needed = []
-            if 'bio' not in existing:
-                needed.append("ALTER TABLE users ADD COLUMN bio TEXT")
-            if 'username_changed_at' not in existing:
-                needed.append("ALTER TABLE users ADD COLUMN username_changed_at JSON NOT NULL DEFAULT '[]'")
-            if needed:
+            existing_tables = set(inspector.get_table_names())
+
+            # Only call create_all when new tables are genuinely missing — avoids a
+            # full metadata scan on every boot for established installs.
+            all_known = {'users', 'friendships', 'friend_requests', 'conversations',
+                         'conversation_participants', 'private_conversation_indices',
+                         'messages', 'attachments', 'revoked_tokens', 'stories',
+                         'story_views', 'call_presences'}
+            if not all_known.issubset(existing_tables):
+                db.create_all()
+                inspector = inspect(db.engine)  # refresh after table creation
+                existing_tables = set(inspector.get_table_names())
+
+            if 'users' not in existing_tables:
+                return  # fresh install — create_all handled everything
+
+            existing_cols = {c['name'] for c in inspector.get_columns('users')}
+            stmts = []
+            if 'bio' not in existing_cols:
+                stmts.append("ALTER TABLE users ADD COLUMN bio TEXT")
+            if 'username_changed_at' not in existing_cols:
+                stmts.append("ALTER TABLE users ADD COLUMN username_changed_at JSON NOT NULL DEFAULT '[]'")
+            # Indexes added after initial deploy — CREATE INDEX IF NOT EXISTS is idempotent
+            stmts += [
+                "CREATE INDEX IF NOT EXISTS ix_cp_conversation ON conversation_participants (conversation_id)",
+                "CREATE INDEX IF NOT EXISTS ix_story_views_viewer ON story_views (viewer_id)",
+            ]
+            if stmts:
                 with db.engine.connect() as conn:
-                    for stmt in needed:
+                    for stmt in stmts:
                         try:
                             conn.execute(text(stmt))
                             conn.commit()

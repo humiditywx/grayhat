@@ -100,6 +100,7 @@ class ConversationParticipant(db.Model):
     __table_args__ = (
         UniqueConstraint('conversation_id', 'user_id', name='uq_conversation_user'),
         Index('ix_cp_user', 'user_id'),
+        Index('ix_cp_conversation', 'conversation_id'),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -199,6 +200,22 @@ class Story(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
 
     user = db.relationship('User')
+
+
+class StoryView(db.Model):
+    __tablename__ = 'story_views'
+    __table_args__ = (
+        UniqueConstraint('story_id', 'viewer_id', name='uq_story_view'),
+        Index('ix_story_views_story', 'story_id'),
+        Index('ix_story_views_viewer', 'viewer_id'),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
+    story_id = db.Column(db.String(36), db.ForeignKey('stories.id', ondelete='CASCADE'), nullable=False)
+    viewer_id = db.Column(db.String(36), db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    viewed_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+
+    viewer = db.relationship('User', foreign_keys=[viewer_id])
 
 
 class CallPresence(db.Model):

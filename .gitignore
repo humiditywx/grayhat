@@ -14,4 +14,4 @@ uploads/*
 htmlcov/
 .DS_Store
 *.log
-DEPLOYMENT.md
+DEPLOY_UPDATE.md

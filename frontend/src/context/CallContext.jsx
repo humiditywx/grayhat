@@ -1,8 +1,6 @@
 import { createContext, useContext, useReducer, useRef, useCallback, useEffect } from 'react'
 import { useSocket } from './SocketContext.jsx'
 import { useApp } from './AppContext.jsx'
-import { useSounds } from '../hooks/useSounds.js'
-
 const Ctx = createContext(null)
 
 const init = {
@@ -57,8 +55,6 @@ export function CallProvider({ children }) {
   const [call, dispatch] = useReducer(reducer, init)
   const { on, emit } = useSocket()
   const { state: appState } = useApp()
-  const { play, stop, stopAllCallSounds } = useSounds()
-
   // Keep fresh refs so socket event closures never go stale
   const meRef = useRef(null)
   const friendsRef = useRef([])
@@ -78,9 +74,6 @@ export function CallProvider({ children }) {
     if (!call.active) return
     if (call.callPhase === 'ringing' && isCallerRef.current) {
       emit('call:start', { conversation_id: call.conversationId, mode: call.mode })
-    }
-    if (call.callPhase === 'connected') {
-      play('callAnswer')
     }
   }, [call.callPhase, call.active]) // eslint-disable-line
 
@@ -183,10 +176,9 @@ export function CallProvider({ children }) {
   const leaveCall = useCallback(() => {
     // Use ref so this never captures a stale conversationId
     emit('call:leave', { conversation_id: conversationIdRef.current })
-    stopAllCallSounds()
     cleanupAll()
     dispatch({ type: 'CALL_ENDED' })
-  }, [emit, cleanupAll, stopAllCallSounds])
+  }, [emit, cleanupAll])
 
   const declineCall = useCallback(() => {
     if (call.incomingCall) {

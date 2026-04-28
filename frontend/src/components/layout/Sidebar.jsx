@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import Avatar from '../common/Avatar.jsx'
 import StoryBar from '../stories/StoryBar.jsx'
@@ -8,7 +8,6 @@ import ProfilePanel from '../panels/ProfilePanel.jsx'
 import AddFriendDialog from '../dialogs/AddFriendDialog.jsx'
 import CreateGroupDialog from '../dialogs/CreateGroupDialog.jsx'
 import { sendFriendRequest, joinGroup, postStory, sendAttachment } from '../../api.js'
-import { useSounds } from '../../hooks/useSounds.js'
 
 function fmtTime(iso) {
   if (!iso) return ''
@@ -33,7 +32,6 @@ function parseScannedValue(val) {
 function CameraActionModal({ file, onClose, dispatch, toast, conversations }) {
   const [view, setView] = useState('options') // 'options' | 'send-picker'
   const [busy, setBusy] = useState(false)
-  const { play } = useSounds()
   const objectUrl = file ? URL.createObjectURL(file) : null
   const isVideo = file?.type?.startsWith('video/')
 
@@ -97,7 +95,6 @@ function CameraActionModal({ file, onClose, dispatch, toast, conversations }) {
       }
       if (parsed.kind === 'friend') {
         const data = await sendFriendRequest({ uuid: parsed.id })
-        play('qrScanSuccess')
         if (data.friend) {
           dispatch({ type: 'ADD_FRIEND', friend: data.friend })
           if (data.conversation) dispatch({ type: 'ADD_CONVERSATION', conv: data.conversation })
@@ -226,11 +223,11 @@ export default function Sidebar({ mobileHidden }) {
   const panel = state.panel
   const selId = state.selectedConvId
 
-  const allConvs = state.conversations.slice().sort((a, b) => {
+  const allConvs = useMemo(() => state.conversations.slice().sort((a, b) => {
     const ta = a.last_message_at ? new Date(a.last_message_at) : new Date(a.created_at)
     const tb = b.last_message_at ? new Date(b.last_message_at) : new Date(b.created_at)
     return tb - ta
-  })
+  }), [state.conversations])
 
   const filteredConvs = search.trim()
     ? allConvs.filter((c) => c.title?.toLowerCase().includes(search.toLowerCase()))

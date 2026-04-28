@@ -3,12 +3,10 @@ import { useSocket } from '../../context/SocketContext.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import Avatar from './Avatar.jsx'
 import { acceptFriendRequest, declineFriendRequest } from '../../api.js'
-import { useSounds } from '../../hooks/useSounds.js'
 
 export default function FriendRequestBanner() {
   const { on } = useSocket()
   const { dispatch } = useApp()
-  const { play } = useSounds()
   const [notification, setNotification] = useState(null) // { request }
   const [visible, setVisible] = useState(false)
   const timerRef = useRef(null)
@@ -28,7 +26,6 @@ export default function FriendRequestBanner() {
       clearTimeout(dismissRef.current)
       setNotification({ request })
       setVisible(false)
-      play('friendRequest')
       requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
       timerRef.current = setTimeout(dismiss, 4500)
     })

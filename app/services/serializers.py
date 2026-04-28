@@ -83,10 +83,7 @@ def _private_partner(conversation: Conversation, current_user_id: str) -> User |
     return None
 
 
-def _last_message_preview(conversation: Conversation) -> str:
-    if not conversation.messages:
-        return ''
-    message = max(conversation.messages, key=lambda item: item.created_at)
+def _preview_from_message(message: Message) -> str:
     if message.message_type == 'text':
         return (message.body or '')[:80]
     if message.message_type == 'voice':
@@ -96,7 +93,14 @@ def _last_message_preview(conversation: Conversation) -> str:
     return message.message_type.title()
 
 
-def serialize_conversation(conversation: Conversation, current_user_id: str) -> dict:
+def _last_message_preview(conversation: Conversation) -> str:
+    if not conversation.messages:
+        return ''
+    message = max(conversation.messages, key=lambda item: item.created_at)
+    return _preview_from_message(message)
+
+
+def serialize_conversation(conversation: Conversation, current_user_id: str, preview: str | None = None) -> dict:
     partner = _private_partner(conversation, current_user_id) if conversation.kind == 'private' else None
     title = conversation.title or (partner.username if partner else 'Direct chat')
     share_url = None
@@ -135,7 +139,7 @@ def serialize_conversation(conversation: Conversation, current_user_id: str) -> 
         'member_count': len(conversation.participants),
         'member_ids': [p.user_id for p in conversation.participants] if conversation.kind == 'group' else None,
         'members_read_at': members_read_at if conversation.kind == 'group' else None,
-        'last_message_preview': _last_message_preview(conversation),
+        'last_message_preview': preview if preview is not None else _last_message_preview(conversation),
         'partner': serialize_user(partner) if partner else None,
         'my_last_read_at': utc_iso(my_last_read_at),
         'partner_last_read_at': utc_iso(partner_last_read_at),

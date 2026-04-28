@@ -83,10 +83,12 @@ export const changeUsername = (b) => patch('/api/users/me/username', b)
 export const getUserProfile = (id) => get(`/api/users/${id}/profile`)
 
 // Stories
-export const getStories    = () => get('/api/stories')
-export const postStory     = (fd) => post('/api/stories', fd)
-export const deleteStory   = (id) => del(`/api/stories/${id}`)
-export const replyStory    = (id, body) => post(`/api/stories/${id}/reply`, { body })
+export const getStories      = () => get('/api/stories')
+export const postStory       = (fd) => post('/api/stories', fd)
+export const deleteStory     = (id) => del(`/api/stories/${id}`)
+export const replyStory      = (id, body) => post(`/api/stories/${id}/reply`, { body })
+export const viewStory       = (id) => post(`/api/stories/${id}/view`, {})
+export const getStoryViews   = (id) => get(`/api/stories/${id}/views`)
 
 /** Upload a story with XHR so upload progress can be tracked. */
 export const postStoryWithProgress = (fd, onProgress) =>

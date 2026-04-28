@@ -1,36 +1,17 @@
-import { useEffect } from 'react'
 import Avatar from '../common/Avatar.jsx'
 import { useCall } from '../../context/CallContext.jsx'
-import { useApp } from '../../context/AppContext.jsx'
-import { useSounds } from '../../hooks/useSounds.js'
 
 export default function IncomingCallDialog() {
   const { call, joinCall, declineCall } = useCall()
-  const { state } = useApp()
-  const { play, stop, stopAllCallSounds } = useSounds()
   const inc = call.incomingCall
-
-  // Determine if this is a group call by looking up the conversation
-  const conv = inc ? state.conversations.find((c) => c.id === inc.conversationId) : null
-  const isGroup = conv?.kind === 'group'
-  const ringSound = isGroup ? 'incomingGroup' : 'incomingRingtone'
-
-  useEffect(() => {
-    if (!inc) return
-    play(ringSound, { loop: true })
-    return () => stop(ringSound)
-  }, [inc?.conversationId]) // eslint-disable-line
 
   if (!inc) return null
 
   const answer = async () => {
-    stop(ringSound)
     await joinCall(inc.conversationId, inc.mode, inc.title, inc.callerAvatar)
   }
 
   const decline = () => {
-    stopAllCallSounds()
-    play('callEnd')
     declineCall()
   }
 

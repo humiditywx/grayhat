@@ -2,7 +2,6 @@ import { useState } from 'react'
 import Avatar from '../common/Avatar.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { removeFriend, openPrivate } from '../../api.js'
-import { useSounds } from '../../hooks/useSounds.js'
 import AddFriendDialog from '../dialogs/AddFriendDialog.jsx'
 
 function fmtLastSeen(iso) {
@@ -17,7 +16,6 @@ function fmtLastSeen(iso) {
 
 export default function FriendsPanel() {
   const { state, dispatch, toast } = useApp()
-  const { play } = useSounds()
 
   const openChat = async (friend) => {
     try {

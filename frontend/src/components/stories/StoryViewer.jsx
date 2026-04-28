@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Avatar from '../common/Avatar.jsx'
-import { deleteStory, replyStory } from '../../api.js'
+import { deleteStory, replyStory, viewStory, getStoryViews } from '../../api.js'
 import { useApp } from '../../context/AppContext.jsx'
 
 const STORY_DURATION = 5000
@@ -11,9 +11,10 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
   const [storyIndex, setStoryIndex] = useState(0)
   const [progress, setProgress] = useState(0)
   const [reply, setReply] = useState('')
-  // swipe state
   const [dragY, setDragY] = useState(0)
   const [closing, setClosing] = useState(false)
+  const [viewers, setViewers] = useState(null)   // null = not yet fetched
+  const [viewersOpen, setViewersOpen] = useState(false)
   const dragStartY = useRef(null)
   const timerRef = useRef(null)
   const startRef = useRef(0)
@@ -22,6 +23,7 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
   const groups = state.stories
   const group = groups[groupIndex]
   const story = group?.stories?.[storyIndex]
+  const isOwn = story?.user_id === state.me?.id
 
   const triggerClose = useCallback(() => {
     setClosing(true)
@@ -44,6 +46,28 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
     else if (groupIndex > 0) { setGroupIndex((g) => g - 1); setStoryIndex(0); setProgress(0) }
   }, [storyIndex, groupIndex])
 
+  // Record view for other users' stories (fire-and-forget)
+  useEffect(() => {
+    if (story && !isOwn) {
+      viewStory(story.id).catch(() => {})
+    }
+  }, [story?.id, isOwn])
+
+  // Fetch viewers when owner is looking at their own story
+  useEffect(() => {
+    if (!story || !isOwn) { setViewers(null); return }
+    setViewers(null)
+    setViewersOpen(false)
+    getStoryViews(story.id)
+      .then((data) => setViewers(data.views || []))
+      .catch(() => setViewers([]))
+  }, [story?.id, isOwn])
+
+  // Pause timer while viewers sheet is open
+  useEffect(() => {
+    pausedRef.current = viewersOpen
+  }, [viewersOpen])
+
   // Progress timer
   useEffect(() => {
     if (!story || story.media_type === 'video') return
@@ -60,23 +84,20 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
     return () => clearInterval(timerRef.current)
   }, [story?.id]) // eslint-disable-line
 
-  // Swipe handlers — close by swiping down OR up
   const onTouchStart = (e) => {
     dragStartY.current = e.touches[0].clientY
     pausedRef.current = true
   }
   const onTouchMove = (e) => {
     if (dragStartY.current === null) return
-    const dy = e.touches[0].clientY - dragStartY.current
-    // Allow drag in both directions, show displacement
-    setDragY(dy)
+    setDragY(e.touches[0].clientY - dragStartY.current)
   }
   const onTouchEnd = () => {
     if (Math.abs(dragY) > 100) {
       triggerClose()
     } else {
       setDragY(0)
-      pausedRef.current = false
+      pausedRef.current = viewersOpen
     }
     dragStartY.current = null
   }
@@ -104,7 +125,6 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
     }
   }
 
-  const isOwn = story.user_id === state.me?.id
   const opacity = Math.max(0, 1 - Math.abs(dragY) / 300)
   const transform = closing
     ? 'translateY(100vh)'
@@ -118,7 +138,7 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
       className="story-viewer"
       style={{ opacity, transform, transition }}
       onPointerDown={(e) => { if (e.target === e.currentTarget) { pausedRef.current = true } }}
-      onPointerUp={(e) => { if (e.target === e.currentTarget) { pausedRef.current = false } }}
+      onPointerUp={(e) => { if (e.target === e.currentTarget) { pausedRef.current = viewersOpen } }}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -159,7 +179,7 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
               src={story.url}
               alt=""
               className="story-media-el"
-              style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'contain' }}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
             />
           : <video
               src={story.url}
@@ -168,8 +188,9 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
               muted={false}
               onEnded={goNext}
               className="story-media-el"
-              style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'contain' }}
-            />}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+        }
       </div>
 
       {story.caption && <div className="story-caption">{story.caption}</div>}
@@ -178,7 +199,24 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
       <div className="story-nav-left" onClick={goPrev} />
       <div className="story-nav-right" onClick={goNext} />
 
-      {/* Reply */}
+      {/* Eye icon — own story only */}
+      {isOwn && (
+        <button
+          className="story-view-count-btn"
+          onClick={() => setViewersOpen(true)}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          <span className="story-view-count-label">
+            {viewers === null ? '…' : viewers.length}
+          </span>
+        </button>
+      )}
+
+      {/* Reply form — other users' stories only */}
       {!isOwn && (
         <div className="story-reply-form">
           <input
@@ -196,6 +234,40 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
               <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
             </svg>
           </button>
+        </div>
+      )}
+
+      {/* Viewers slide-up sheet */}
+      {viewersOpen && (
+        <div className="story-viewers-overlay" onClick={() => setViewersOpen(false)}>
+          <div className="story-viewers-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="story-viewers-handle" />
+            <div className="story-viewers-header">
+              <span>Viewers · {viewers?.length ?? 0}</span>
+              <button className="story-close-btn" onClick={() => setViewersOpen(false)}>✕</button>
+            </div>
+            <div className="story-viewers-list">
+              {viewers === null && (
+                <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '32px 0', fontSize: 'var(--text-sm)' }}>
+                  Loading…
+                </div>
+              )}
+              {viewers?.length === 0 && (
+                <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '32px 0', fontSize: 'var(--text-sm)' }}>
+                  No views yet.
+                </div>
+              )}
+              {viewers?.map((v) => (
+                <div key={v.viewer_id} className="story-viewer-item">
+                  <Avatar user={{ username: v.username, avatar_url: v.avatar_url }} size="sm" />
+                  <div className="story-viewer-item-info">
+                    <div className="story-viewer-item-name">{v.username}</div>
+                    <div className="story-viewer-item-time">{fmtAgo(v.viewed_at)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,12 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import Modal from '../common/Modal.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { sendFriendRequest, scanQrImage } from '../../api.js'
-import { useSounds } from '../../hooks/useSounds.js'
 
 export default function AddFriendDialog({ onClose }) {
   const { state, dispatch, toast } = useApp()
-  const { play } = useSounds()
   const [tab, setTab] = useState('qr')
 
   return (
@@ -20,8 +18,8 @@ export default function AddFriendDialog({ onClose }) {
       </div>
 
       {tab === 'qr'    && <MyQR me={state.me} myAddLink={state.myAddLink} />}
-      {tab === 'uuid'  && <AddByUUID dispatch={dispatch} toast={toast} play={play} onClose={onClose} />}
-      {tab === 'image' && <ScanImage  dispatch={dispatch} toast={toast} play={play} onClose={onClose} />}
+      {tab === 'uuid'  && <AddByUUID dispatch={dispatch} toast={toast} onClose={onClose} />}
+      {tab === 'image' && <ScanImage  dispatch={dispatch} toast={toast} onClose={onClose} />}
     </Modal>
   )
 }
@@ -47,7 +45,7 @@ function MyQR({ me, myAddLink }) {
   )
 }
 
-function AddByUUID({ dispatch, toast, play, onClose }) {
+function AddByUUID({ dispatch, toast, onClose }) {
   const [val, setVal] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -60,7 +58,6 @@ function AddByUUID({ dispatch, toast, play, onClose }) {
       if (data.friend) {
         dispatch({ type: 'ADD_FRIEND', friend: data.friend })
         if (data.conversation) dispatch({ type: 'ADD_CONVERSATION', conv: data.conversation })
-        play('friendAdded')
         toast(`${data.friend.username} added!`, 'success')
       } else if (data.request) {
         dispatch({ type: 'ADD_OUTGOING_REQUEST', request: data.request })
@@ -87,71 +84,7 @@ function AddByUUID({ dispatch, toast, play, onClose }) {
   )
 }
 
-function ScanCamera({ dispatch, toast, play, onClose }) {
-  const videoRef = useRef(null)
-  const streamRef = useRef(null)
-  const rafRef = useRef(null)
-  const [scanning, setScanning] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    let active = true
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      .then((stream) => {
-        if (!active) { stream.getTracks().forEach((t) => t.stop()); return }
-        streamRef.current = stream
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.onplay = () => {
-            if (!active) return
-            setScanning(true)
-            scan()
-          }
-        }
-      })
-      .catch(() => setError('Camera access denied.'))
-
-    async function scan() {
-      if (!('BarcodeDetector' in window)) { setError('QR scanning not supported in this browser.'); return }
-      const detector = new window.BarcodeDetector({ formats: ['qr_code'] })
-      const loop = async () => {
-        if (!active || !videoRef.current) return
-        try {
-          const codes = await detector.detect(videoRef.current)
-          if (codes.length) {
-            const val = codes[0].rawValue
-            active = false
-            play('qrScanSuccess')
-            addByValue(val, dispatch, toast, onClose)
-            return
-          }
-        } catch {}
-        rafRef.current = requestAnimationFrame(loop)
-      }
-      rafRef.current = requestAnimationFrame(loop)
-    }
-
-    return () => {
-      active = false
-      cancelAnimationFrame(rafRef.current)
-      streamRef.current?.getTracks().forEach((t) => t.stop())
-    }
-  }, []) // eslint-disable-line
-
-  if (error) return <div style={{ color: 'var(--text-2)', fontSize: 'var(--text-sm)', textAlign: 'center', padding: 20 }}>{error}</div>
-
-  return (
-    <div className="scanner-wrap">
-      <video ref={videoRef} className="scanner-video" autoPlay playsInline muted />
-      <div className="scanner-viewfinder">
-        <div className="scanner-box" />
-      </div>
-      {scanning && <div style={{ position: 'absolute', bottom: 12, left: 0, right: 0, textAlign: 'center', color: 'rgba(255,255,255,.8)', fontSize: 'var(--text-xs)' }}>Point at a QR code</div>}
-    </div>
-  )
-}
-
-function ScanImage({ dispatch, toast, play, onClose }) {
+function ScanImage({ dispatch, toast, onClose }) {
   const [busy, setBusy] = useState(false)
 
   const pick = async (e) => {
@@ -162,7 +95,6 @@ function ScanImage({ dispatch, toast, play, onClose }) {
     fd.append('file', file)
     try {
       const data = await scanQrImage(fd)
-      play('qrScanSuccess')
       if (data.friend) {
         dispatch({ type: 'ADD_FRIEND', friend: data.friend })
         if (data.conversation) dispatch({ type: 'ADD_CONVERSATION', conv: data.conversation })
