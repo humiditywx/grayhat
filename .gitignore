@@ -15,3 +15,5 @@ htmlcov/
 .DS_Store
 *.log
 DEPLOY_UPDATE.md
+frontend/node_modules
+frontend/package-lock.json
