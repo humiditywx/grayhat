@@ -1,0 +1,1821 @@
+openapi: 3.0.3
+info:
+  title: Pentastic API
+  description: |
+    REST API for **Pentastic**, a secure social messaging platform.
+
+    ### Authentication
+    All protected endpoints use **JWT stored in an HttpOnly cookie** (`access_token_cookie`).
+    Call `POST /api/auth/login` first — the cookie is set automatically.
+
+    For mutating requests (POST / PATCH / DELETE) the server also requires the
+    `X-CSRF-TOKEN` header. The Swagger UI on this page extracts the CSRF token
+    from the `csrf_access_token` cookie automatically, so you don't need to set
+    it manually.
+
+    ### Rate limits
+    - `POST /api/auth/register` → 10 / hour
+    - `POST /api/auth/login`, `POST /api/auth/password-reset` → 20 / hour
+  version: "1.0.0"
+  contact:
+    name: Pentastic
+
+servers:
+  - url: /
+    description: Current server
+
+tags:
+  - name: auth
+    description: Register, login, logout, TOTP setup, and password management.
+  - name: bootstrap
+    description: Load the complete initial application state in one request.
+  - name: friends
+    description: Manage the friend list — send requests, accept, decline, cancel, and unfriend.
+  - name: conversations
+    description: List conversations and private chat management.
+  - name: messages
+    description: Send, edit, delete, react to, and paginate messages; upload file attachments.
+  - name: groups
+    description: Create public groups, join via share link, manage members and icons.
+  - name: users
+    description: User profiles, avatars, username changes, and add-friend QR codes.
+  - name: stories
+    description: 24-hour media stories — post, view, reply, record views.
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: access_token_cookie
+      description: JWT issued on login/register. Set automatically by the browser.
+
+  schemas:
+    # ─── Primitives ─────────────────────────────────────────────────────────────
+    Ok:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+      required: [ok]
+
+    ErrorResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Invalid username or password."
+      required: [ok, error]
+
+    # ─── User ───────────────────────────────────────────────────────────────────
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        username:
+          type: string
+          example: "alice"
+        bio:
+          type: string
+          example: "Hey there! I'm using Pentastic."
+        totp_enabled:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+          example: "/api/users/3fa85f64-5717-4562-b3fc-2c963f66afa6/avatar"
+
+    Friend:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            conversation_id:
+              type: string
+              format: uuid
+              nullable: true
+              description: Private conversation UUID with this friend.
+            add_link:
+              type: string
+              example: "https://example.com/add/3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+    # ─── Friend Request ─────────────────────────────────────────────────────────
+    FriendRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sender_id:
+          type: string
+          format: uuid
+        receiver_id:
+          type: string
+          format: uuid
+        direction:
+          type: string
+          enum: [incoming, outgoing]
+        other_user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            username:
+              type: string
+            avatar_url:
+              type: string
+              nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # ─── Attachment ─────────────────────────────────────────────────────────────
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "photo.jpg"
+        kind:
+          type: string
+          enum: [image, video, audio, voice, document, file]
+        content_type:
+          type: string
+          example: "image/jpeg"
+        size_bytes:
+          type: integer
+          example: 204800
+        url:
+          type: string
+          example: "/api/attachments/3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+    # ─── Message ────────────────────────────────────────────────────────────────
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        sender:
+          $ref: '#/components/schemas/User'
+          nullable: true
+        message_type:
+          type: string
+          enum: [text, image, video, audio, voice, document, file]
+          example: text
+        body:
+          type: string
+          nullable: true
+          description: "null when the message has been deleted."
+        edited_at:
+          type: string
+          format: date-time
+          nullable: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+        extra:
+          type: object
+          description: >
+            Optional metadata: `reply_to` (quoted message), `hearts` (list of user IDs
+            who reacted ❤️), `story_reply` (story context).
+
+    # ─── Conversation ───────────────────────────────────────────────────────────
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [private, group]
+        title:
+          type: string
+          example: "Alice & Bob"
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        last_message_at:
+          type: string
+          format: date-time
+          nullable: true
+        me_role:
+          type: string
+          enum: [owner, admin, member]
+        is_public:
+          type: boolean
+        share_url:
+          type: string
+          nullable: true
+          description: Invite URL (group conversations only).
+        member_count:
+          type: integer
+        member_ids:
+          type: array
+          nullable: true
+          items:
+            type: string
+            format: uuid
+          description: Group conversations only.
+        members_read_at:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+            format: date-time
+          description: "Map of user_id → last_read_at (group conversations only)."
+        last_message_preview:
+          type: string
+          example: "Hey, what's up?"
+        partner:
+          $ref: '#/components/schemas/User'
+          nullable: true
+          description: Other participant (private conversations only).
+        my_last_read_at:
+          type: string
+          format: date-time
+          nullable: true
+        partner_last_read_at:
+          type: string
+          format: date-time
+          nullable: true
+        icon_url:
+          type: string
+          nullable: true
+
+    # ─── Story ──────────────────────────────────────────────────────────────────
+    Story:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        avatar_url:
+          type: string
+          nullable: true
+        media_type:
+          type: string
+          enum: [image, video]
+        url:
+          type: string
+          example: "/api/stories/3fa85f64-5717-4562-b3fc-2c963f66afa6/media"
+        content_type:
+          type: string
+          example: "image/jpeg"
+        caption:
+          type: string
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    StoryGroup:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        avatar_url:
+          type: string
+          nullable: true
+        stories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Story'
+
+security:
+  - cookieAuth: []
+
+paths:
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # AUTH
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  /api/auth/register:
+    post:
+      tags: [auth]
+      summary: Register a new account
+      description: >
+        Creates a new user account and returns a JWT cookie.
+        Rate-limited to **10 requests per hour**.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  minLength: 3
+                  maxLength: 24
+                  pattern: '^[A-Za-z0-9_]+$'
+                  example: alice
+                password:
+                  type: string
+                  minLength: 8
+                  example: "s3cur3P@ss"
+      responses:
+        '201':
+          description: Account created. JWT cookie is set.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  user: { $ref: '#/components/schemas/User' }
+                  requires_totp_setup: { type: boolean, example: true }
+        '400':
+          description: Validation error (missing or invalid fields).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '409':
+          description: Username already taken.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/auth/login:
+    post:
+      tags: [auth]
+      summary: Log in
+      description: >
+        Authenticates with username + password and sets the JWT cookie.
+        Rate-limited to **20 requests per hour**.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: alice }
+                password: { type: string, example: "s3cur3P@ss" }
+      responses:
+        '200':
+          description: Login successful. JWT cookie is set.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  user: { $ref: '#/components/schemas/User' }
+                  requires_totp_setup: { type: boolean }
+        '401':
+          description: Invalid credentials.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      summary: Log out
+      description: Revokes the current JWT and clears auth cookies.
+      responses:
+        '200':
+          description: Logged out.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+
+  /api/auth/me:
+    get:
+      tags: [auth]
+      summary: Get current user
+      description: Returns the authenticated user's profile.
+      responses:
+        '200':
+          description: Current user.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  user: { $ref: '#/components/schemas/User' }
+                  requires_totp_setup: { type: boolean }
+
+  /api/auth/totp/setup:
+    post:
+      tags: [auth]
+      summary: Initiate TOTP setup
+      description: >
+        Generates a new TOTP secret, returns the `otpauth://` URI, a QR code
+        data-URI, and one-time recovery codes. The secret is saved but
+        `totp_enabled` stays `false` until confirmed via `/totp/confirm`.
+      responses:
+        '200':
+          description: TOTP secret ready to scan.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  otpauth_uri: { type: string }
+                  qr_code: { type: string, description: Base64 data-URI PNG. }
+                  recovery_codes:
+                    type: array
+                    items: { type: string }
+                    example: ["ABC-DEF-GHI", "JKL-MNO-PQR"]
+
+  /api/auth/totp/confirm:
+    post:
+      tags: [auth]
+      summary: Confirm and enable TOTP
+      description: Verifies a 6-digit TOTP code from the authenticator app to activate 2FA.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, example: "123456" }
+      responses:
+        '200':
+          description: TOTP activated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  user: { $ref: '#/components/schemas/User' }
+        '400':
+          description: Invalid or missing TOTP code.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/auth/password-reset:
+    post:
+      tags: [auth]
+      summary: Reset password using TOTP or recovery code
+      description: >
+        Resets the password for an account identified by username. Requires a
+        valid TOTP code **or** one of the account's recovery codes.
+        Rate-limited to **20 requests per hour**.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, verification_code, new_password]
+              properties:
+                username: { type: string, example: alice }
+                verification_code:
+                  type: string
+                  description: 6-digit TOTP code or an uppercase recovery code.
+                  example: "123456"
+                new_password: { type: string, example: "newP@ssw0rd" }
+      responses:
+        '200':
+          description: Password reset and logged in.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  user: { $ref: '#/components/schemas/User' }
+                  requires_totp_setup: { type: boolean }
+        '400':
+          description: Invalid username, TOTP code, or recovery code.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/auth/password-change:
+    post:
+      tags: [auth]
+      summary: Change password (authenticated)
+      description: Changes the password for the logged-in user. Invalidates all existing sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 8 }
+      responses:
+        '200':
+          description: Password changed; new JWT cookie issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  user: { $ref: '#/components/schemas/User' }
+                  requires_totp_setup: { type: boolean }
+        '400':
+          description: Current password incorrect.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # BOOTSTRAP
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  /api/bootstrap:
+    get:
+      tags: [bootstrap]
+      summary: Load initial app state
+      description: >
+        Returns the full initial state needed to render the app: current user,
+        friends list, conversations (with last-message preview), pending friend
+        requests, active stories, and WebRTC ICE servers. Called once on login.
+      responses:
+        '200':
+          description: Complete initial state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  user: { $ref: '#/components/schemas/User' }
+                  my_uuid: { type: string, format: uuid }
+                  my_add_link:
+                    type: string
+                    example: "https://example.com/add/3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  friends:
+                    type: array
+                    items: { $ref: '#/components/schemas/Friend' }
+                  conversations:
+                    type: array
+                    items: { $ref: '#/components/schemas/Conversation' }
+                  friend_requests:
+                    type: object
+                    properties:
+                      incoming:
+                        type: array
+                        items: { $ref: '#/components/schemas/FriendRequest' }
+                      outgoing:
+                        type: array
+                        items: { $ref: '#/components/schemas/FriendRequest' }
+                  story_groups:
+                    type: array
+                    items: { $ref: '#/components/schemas/StoryGroup' }
+                  ice_servers:
+                    type: array
+                    description: WebRTC ICE/TURN server configuration.
+                    items:
+                      type: object
+                      properties:
+                        urls:
+                          oneOf:
+                            - type: string
+                            - type: array
+                              items: { type: string }
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # FRIENDS
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  /api/friends:
+    get:
+      tags: [friends]
+      summary: List friends
+      description: Returns all friends of the current user sorted alphabetically.
+      responses:
+        '200':
+          description: Friend list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  friends:
+                    type: array
+                    items: { $ref: '#/components/schemas/Friend' }
+
+    post:
+      tags: [friends]
+      summary: Send a friend request (by UUID or add-link)
+      description: >
+        Sends a friend request to a user identified by their UUID or
+        `https://…/add/{uuid}` add-link. If the target has already sent you a
+        request, it auto-accepts and returns the new friendship + conversation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uuid]
+              properties:
+                uuid:
+                  type: string
+                  description: >
+                    User UUID, full add-link URL
+                    (`https://…/add/{uuid}`), or deeplink (`expressmessenger:add:{uuid}`).
+                  example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+      responses:
+        '200':
+          description: Friend request sent, or auto-accepted (if mutual).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  request: { $ref: '#/components/schemas/FriendRequest' }
+        '400':
+          description: Invalid UUID, already friends, or request already sent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/friends/scan-image:
+    post:
+      tags: [friends]
+      summary: Send a friend request by scanning a QR image
+      description: >
+        Upload an image containing a Pentastic add-friend QR code.
+        Decodes the QR and sends the friend request (or auto-accepts if mutual).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Image file containing a QR code.
+      responses:
+        '200':
+          description: Friend request sent or auto-accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  request: { $ref: '#/components/schemas/FriendRequest' }
+        '400':
+          description: No QR found, invalid payload, or already friends.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/friends/{friend_id}:
+    delete:
+      tags: [friends]
+      summary: Remove a friend
+      description: >
+        Deletes the friendship and removes all pending friend requests between
+        the two users. The shared private conversation remains accessible until
+        one of the users deletes it.
+      parameters:
+        - name: friend_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Friend removed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+        '404':
+          description: Friendship not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/friends/requests:
+    get:
+      tags: [friends]
+      summary: List pending friend requests
+      description: Returns all incoming and outgoing pending friend requests.
+      responses:
+        '200':
+          description: Friend request lists.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  incoming:
+                    type: array
+                    items: { $ref: '#/components/schemas/FriendRequest' }
+                  outgoing:
+                    type: array
+                    items: { $ref: '#/components/schemas/FriendRequest' }
+
+  /api/friends/requests/{request_id}/accept:
+    post:
+      tags: [friends]
+      summary: Accept a friend request
+      description: >
+        Accepts an incoming friend request, creates the friendship, and returns
+        the shared private conversation. Both users receive a `friend:request:accepted`
+        Socket.IO event.
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Request accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  friend: { $ref: '#/components/schemas/Friend' }
+                  conversation: { $ref: '#/components/schemas/Conversation' }
+        '400':
+          description: Already friends.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Request not found or already processed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/friends/requests/{request_id}/decline:
+    post:
+      tags: [friends]
+      summary: Decline a friend request
+      description: Declines an incoming friend request and deletes the row.
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Request declined.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+        '404':
+          description: Request not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/friends/requests/{request_id}:
+    delete:
+      tags: [friends]
+      summary: Cancel an outgoing friend request
+      description: Cancels a friend request you sent.
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Request cancelled.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+        '404':
+          description: Request not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # CONVERSATIONS
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  /api/conversations:
+    get:
+      tags: [conversations]
+      summary: List conversations
+      description: >
+        Returns all conversations the current user is a member of,
+        sorted by most recent message.
+      responses:
+        '200':
+          description: Conversation list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  conversations:
+                    type: array
+                    items: { $ref: '#/components/schemas/Conversation' }
+
+  /api/conversations/private/{friend_id}:
+    post:
+      tags: [conversations]
+      summary: Get or create private conversation
+      description: >
+        Returns the existing private conversation with a friend, or creates one
+        if it doesn't exist yet.
+      parameters:
+        - name: friend_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Private conversation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  conversation: { $ref: '#/components/schemas/Conversation' }
+        '404':
+          description: User not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/conversations/{conversation_id}/read:
+    post:
+      tags: [conversations]
+      summary: Mark conversation as read
+      description: >
+        Updates `last_read_at` for the current user in this conversation.
+        Emits a `conversation:read` event to all participants.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Marked as read.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  read_at: { type: string, format: date-time }
+
+  /api/conversations/{conversation_id}/membership:
+    delete:
+      tags: [conversations]
+      summary: Leave or delete a conversation
+      description: >
+        **Private:** deletes the entire conversation for both parties.
+        **Group:** removes you from the group. If you were the owner, ownership
+        is transferred to the next member. If you are the last member, the group
+        is deleted.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Left / deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+        '404':
+          description: Conversation or membership not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # MESSAGES
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  /api/conversations/{conversation_id}/messages:
+    get:
+      tags: [messages]
+      summary: Paginate messages
+      description: >
+        Returns up to `limit` messages in ascending order. Use `before` (an ISO
+        date-time) to load older pages. Max 100 per request.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: before
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Return messages older than this timestamp (cursor-based pagination).
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 50, maximum: 100 }
+      responses:
+        '200':
+          description: Message page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  messages:
+                    type: array
+                    items: { $ref: '#/components/schemas/Message' }
+
+    post:
+      tags: [messages]
+      summary: Send a text message
+      description: >
+        Sends a text message to a conversation. Emits a `message:new` Socket.IO
+        event to all participants. Supports optional `reply_to_id` to quote a
+        previous message.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, maxLength: 4000, example: "Hello!" }
+                reply_to_id:
+                  type: string
+                  format: uuid
+                  description: ID of the message being quoted.
+      responses:
+        '201':
+          description: Message sent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  message: { $ref: '#/components/schemas/Message' }
+        '400':
+          description: Empty body or message too long.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/conversations/{conversation_id}/attachments:
+    post:
+      tags: [messages]
+      summary: Upload a file attachment
+      description: >
+        Uploads a file (image, video, audio, document) as a message in the
+        conversation. The `message_type` form field can force `voice` for audio
+        recordings. Emits `message:new` to all participants.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                body:
+                  type: string
+                  description: Optional caption.
+                message_type:
+                  type: string
+                  enum: [voice]
+                  description: Force type to `voice` for voice recordings.
+                reply_to_id:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Attachment sent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  message: { $ref: '#/components/schemas/Message' }
+
+  /api/attachments/{attachment_id}:
+    get:
+      tags: [messages]
+      summary: Download an attachment
+      description: >
+        Streams the attachment file. Add `?download=1` to force a file download
+        instead of inline display.
+      parameters:
+        - name: attachment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: download
+          in: query
+          required: false
+          schema: { type: string, enum: ["1"] }
+          description: Set to `1` to force Content-Disposition attachment.
+      responses:
+        '200':
+          description: File content.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '404':
+          description: Attachment not found or not accessible.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/messages/{message_id}:
+    patch:
+      tags: [messages]
+      summary: Edit a text message
+      description: >
+        Edits the body of your own text message. Sets `edited_at`. Emits
+        `message:updated` to all participants.
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, example: "Corrected message." }
+      responses:
+        '200':
+          description: Message edited.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  message: { $ref: '#/components/schemas/Message' }
+        '403':
+          description: Not your message or not a text message.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Message not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+    delete:
+      tags: [messages]
+      summary: Delete a message
+      description: >
+        Soft-deletes a message (sets `deleted_at`, clears `body`). You can delete
+        your own messages; group owners/admins can delete any message.
+        Emits `message:deleted`.
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Message deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  message: { $ref: '#/components/schemas/Message' }
+        '403':
+          description: Not authorized to delete this message.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/messages/{message_id}/react:
+    post:
+      tags: [messages]
+      summary: Toggle ❤️ reaction
+      description: >
+        Toggles a ❤️ heart reaction on a message. Adds the reaction if you
+        haven't reacted; removes it if you have. Only `❤️` is supported.
+        Emits `message:reaction`.
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                emoji: { type: string, example: "❤️", default: "❤️" }
+      responses:
+        '200':
+          description: Reaction toggled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  message: { $ref: '#/components/schemas/Message' }
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # GROUPS
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  /api/conversations/groups:
+    post:
+      tags: [groups]
+      summary: Create a group
+      description: >
+        Creates a new public group conversation. The creator is assigned the
+        `owner` role. Returns the new conversation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, maxLength: 120, example: "Dev Team" }
+                description: { type: string, example: "Engineering discussion." }
+      responses:
+        '201':
+          description: Group created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  conversation: { $ref: '#/components/schemas/Conversation' }
+        '400':
+          description: Title is empty.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/groups/{share_token}/public:
+    get:
+      tags: [groups]
+      summary: Get public group metadata (unauthenticated)
+      description: >
+        Returns a group's title, description, member count, and invite URL.
+        Does **not** require authentication — used for invite preview pages.
+      security: []
+      parameters:
+        - name: share_token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Group metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  group:
+                    type: object
+                    properties:
+                      title: { type: string }
+                      description: { type: string, nullable: true }
+                      member_count: { type: integer }
+                      share_url: { type: string }
+        '404':
+          description: Group not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/groups/join/{share_token}:
+    post:
+      tags: [groups]
+      summary: Join a public group
+      description: Joins the group identified by its share token. No-op if already a member.
+      parameters:
+        - name: share_token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Joined group.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  conversation: { $ref: '#/components/schemas/Conversation' }
+        '404':
+          description: Group not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/conversations/{conversation_id}/members:
+    get:
+      tags: [groups]
+      summary: List group members
+      description: Returns all members of a group conversation with their roles.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Member list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  members:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/User'
+                        - type: object
+                          properties:
+                            role: { type: string, enum: [owner, admin, member] }
+
+    post:
+      tags: [groups]
+      summary: Add a member to a group
+      description: Adds a user (by ID) to a group conversation.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Member added.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  conversation: { $ref: '#/components/schemas/Conversation' }
+        '400':
+          description: Not a group or user already in group.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: User not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/conversations/{conversation_id}/icon:
+    get:
+      tags: [groups]
+      summary: Get group icon image
+      description: Streams the group's icon image file.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Icon image.
+          content:
+            image/*:
+              schema: { type: string, format: binary }
+        '404':
+          description: No icon set.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+    post:
+      tags: [groups]
+      summary: Upload group icon
+      description: Uploads a new icon image for a group. Replaces the previous icon.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: Icon uploaded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  icon_url: { type: string }
+        '400':
+          description: Not a group, no file, or non-image file.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # USERS
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  /api/users/me/avatar:
+    post:
+      tags: [users]
+      summary: Upload profile avatar
+      description: Uploads a new profile picture. Replaces the previous avatar.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: Avatar uploaded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  avatar_url: { type: string }
+        '400':
+          description: No file or non-image file.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/users/me/qr.png:
+    get:
+      tags: [users]
+      summary: Get your add-friend QR code (PNG)
+      description: >
+        Returns a PNG image of the QR code that encodes your
+        `https://…/add/{uuid}` add-friend link. Scan with the app to send a
+        friend request.
+      responses:
+        '200':
+          description: QR code image.
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+
+  /api/users/me/profile:
+    patch:
+      tags: [users]
+      summary: Update profile bio
+      description: Updates the current user's bio (max 300 characters).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bio: { type: string, maxLength: 300, example: "Coffee lover ☕" }
+      responses:
+        '200':
+          description: Profile updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  user: { $ref: '#/components/schemas/User' }
+
+  /api/users/me/username:
+    patch:
+      tags: [users]
+      summary: Change username
+      description: >
+        Changes the current user's username. Limited to **2 changes per 14
+        days**. The new username must be 3–24 characters, letters/numbers/underscores only,
+        and not already taken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username]
+              properties:
+                username: { type: string, minLength: 3, maxLength: 24, example: "alice_new" }
+      responses:
+        '200':
+          description: Username changed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  user: { $ref: '#/components/schemas/User' }
+                  changes_in_window:
+                    type: integer
+                    description: Number of changes made in the current 14-day window.
+        '400':
+          description: Invalid username.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '409':
+          description: Username already taken.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '429':
+          description: Rate limit exceeded (2 changes per 14 days).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/users/{user_id}/avatar:
+    get:
+      tags: [users]
+      summary: Get a user's avatar image
+      description: Streams the user's profile picture.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Avatar image.
+          content:
+            image/*:
+              schema: { type: string, format: binary }
+        '404':
+          description: No avatar set.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/users/{user_id}/profile:
+    get:
+      tags: [users]
+      summary: Get a user's public profile
+      description: Returns public profile data for any user by ID.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: User profile.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  user: { $ref: '#/components/schemas/User' }
+        '404':
+          description: User not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/conversations/{conversation_id}/qr.png:
+    get:
+      tags: [users]
+      summary: Get a group's invite QR code (PNG)
+      description: Returns a PNG QR code encoding the group's public share URL.
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: QR code image.
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+        '400':
+          description: Not a group conversation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # STORIES
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  /api/stories:
+    get:
+      tags: [stories]
+      summary: List active stories
+      description: >
+        Returns all non-expired stories from the current user and their friends,
+        grouped by author. Videos are transcoded to H.264/720p at upload time.
+      responses:
+        '200':
+          description: Story groups.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  story_groups:
+                    type: array
+                    items: { $ref: '#/components/schemas/StoryGroup' }
+
+    post:
+      tags: [stories]
+      summary: Post a story
+      description: >
+        Uploads a new image or video story. Stories expire after **24 hours**.
+        Videos are automatically transcoded to H.264/720p. Emits `story:new`
+        to the uploader and all their friends.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                caption: { type: string, example: "Good morning! ☀️" }
+      responses:
+        '201':
+          description: Story posted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  story: { $ref: '#/components/schemas/Story' }
+        '400':
+          description: No file or unsupported file type.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/stories/{story_id}/media:
+    get:
+      tags: [stories]
+      summary: Stream story media
+      description: >
+        Streams the image or video content of a story. Only accessible to the
+        author and their friends. Returns **410 Gone** if the story has expired.
+      parameters:
+        - name: story_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Media file.
+          content:
+            image/*:
+              schema: { type: string, format: binary }
+            video/*:
+              schema: { type: string, format: binary }
+        '403':
+          description: Not a friend of the story author.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '410':
+          description: Story has expired.
+
+  /api/stories/{story_id}:
+    delete:
+      tags: [stories]
+      summary: Delete a story
+      description: Deletes one of your own stories immediately.
+      parameters:
+        - name: story_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Story deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+        '404':
+          description: Story not found or not yours.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/stories/{story_id}/reply:
+    post:
+      tags: [stories]
+      summary: Reply to a story
+      description: >
+        Sends a text message to the story author's private conversation as a
+        story reply. Creates the private conversation if it doesn't exist.
+        Cannot reply to your own story.
+      parameters:
+        - name: story_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, example: "Love this!" }
+      responses:
+        '200':
+          description: Reply sent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  conversation_id: { type: string, format: uuid }
+        '400':
+          description: Empty body or replying to own story.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Story not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '410':
+          description: Story expired.
+
+  /api/stories/{story_id}/view:
+    post:
+      tags: [stories]
+      summary: Record a story view
+      description: >
+        Records that the current user viewed a story. Idempotent — viewing the
+        same story multiple times is recorded only once. Views on your own
+        stories are silently ignored.
+      parameters:
+        - name: story_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: View recorded (or silently ignored).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+
+  /api/stories/{story_id}/views:
+    get:
+      tags: [stories]
+      summary: Get story viewers (author only)
+      description: >
+        Returns the list of users who have viewed a story. Only accessible by
+        the story author; returns **403** for everyone else.
+      parameters:
+        - name: story_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Viewer list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  views:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        viewer_id: { type: string, format: uuid }
+                        username: { type: string }
+                        avatar_url: { type: string, nullable: true }
+                        viewed_at: { type: string, format: date-time }
+        '403':
+          description: Not the story author.
