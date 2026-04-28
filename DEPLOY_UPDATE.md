@@ -2,6 +2,69 @@
 
 ---
 
+## 2026-04-28 — Feature: Swagger UI API documentation at /docs
+
+### What changed
+| File | Change |
+|------|--------|
+| `app/blueprints/docs.py` | New blueprint. `GET /docs/` serves a custom dark-themed Swagger UI (swagger-ui loaded from CDN, no new Python packages). `GET /docs/openapi.yaml` serves the OpenAPI spec. The UI auto-injects the `X-CSRF-TOKEN` header from the `csrf_access_token` cookie via `requestInterceptor`, so login → execute works without any manual token setup. |
+| `app/static/swagger/openapi.yaml` | OpenAPI 3.0.3 spec covering all 50 endpoints across auth, bootstrap, friends, conversations, messages, groups, users, and stories. Includes schemas, example values, and response documentation. |
+| `app/__init__.py` | Registered `docs_bp`. |
+
+### Deploy steps (server)
+```bash
+cd /opt/expressmessenger
+git pull origin main
+systemctl restart expressmessenger
+systemctl status expressmessenger
+```
+
+Backend-only change — no frontend build, no new Python packages, no DB migration needed. Swagger UI loads from CDN on first browser visit.
+
+### Access
+```
+https://your-server/docs/
+```
+
+### Rollback
+```bash
+cd /opt/expressmessenger
+git revert HEAD --no-edit
+systemctl restart expressmessenger
+```
+
+---
+
+## 2026-04-28 — Bugfix: unfriend + re-add no longer returns HTTP 500
+
+### What changed
+| File | Change |
+|------|--------|
+| `app/blueprints/api.py` | Added `from sqlalchemy.exc import IntegrityError`. Wrapped all three `add_friend()` call sites (`accept_friend_request`, `create_friendship`, `scan_friend_image`) to catch `IntegrityError` in addition to `ValueError`, rolling back the session and returning HTTP 400 `"Already friends."`. Wrapped the `FriendRequest` INSERT in `create_friendship` and `scan_friend_image` in a try/except to catch the race-condition case where two concurrent requests both pass the pending-check and then collide on the `uq_friend_request_pair` unique constraint — returns HTTP 400 `"Request already sent."` instead of 500. |
+| `app/__init__.py` | Registered a global `IntegrityError` error handler as a safety net: rolls back the session and returns HTTP 400 JSON for any unhandled SQLAlchemy constraint violation, preventing it from propagating as a 500. |
+
+### Why this fixes the bug
+`add_friend()` (in `chat.py`) calls `db.session.flush()` which can raise `IntegrityError` in a race condition (two requests creating the same `Friendship` row concurrently). Callers previously only caught `ValueError`, so the `IntegrityError` escaped as an unhandled 500. This fix handles it locally with a rollback and a clear 400 response. The global handler catches any remaining cases.
+
+### Deploy steps (server)
+```bash
+cd /opt/expressmessenger
+git pull origin main
+systemctl restart expressmessenger
+systemctl status expressmessenger
+```
+
+Backend-only change — no frontend build, no DB migration, no Nginx reload needed.
+
+### Rollback
+```bash
+cd /opt/expressmessenger
+git revert HEAD --no-edit
+systemctl restart expressmessenger
+```
+
+---
+
 ## 2026-04-28 — Bugfix: reverse friend request after unfriend no longer returns HTTP 500
 
 ### What changed

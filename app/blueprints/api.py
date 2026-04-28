@@ -10,6 +10,7 @@ from flask_jwt_extended import current_user, jwt_required
 from PIL import Image, UnidentifiedImageError
 from pyzbar.pyzbar import decode as decode_qr
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from ..extensions import db, limiter, socketio
@@ -322,6 +323,9 @@ def accept_friend_request(request_id: str):
         _, conversation = add_friend(current_user, sender)
     except ValueError as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 400
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': 'Already friends.'}), 400
 
     db.session.delete(req)
     db.session.commit()
@@ -416,6 +420,9 @@ def create_friendship():
             _, conversation = add_friend(current_user, target)
         except ValueError as exc:
             return jsonify({'ok': False, 'error': str(exc)}), 400
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify({'ok': False, 'error': 'Already friends.'}), 400
         db.session.delete(their_request)
         db.session.commit()
         full_conv = db.session.get(
@@ -450,9 +457,13 @@ def create_friendship():
     _clear_stale_friend_requests_between(current_user.id, target_id)
 
     # Create new friend request
-    req = FriendRequest(sender_id=current_user.id, receiver_id=target_id, status='pending')
-    db.session.add(req)
-    db.session.commit()
+    try:
+        req = FriendRequest(sender_id=current_user.id, receiver_id=target_id, status='pending')
+        db.session.add(req)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': 'Request already sent.'}), 400
 
     # Reload with relationships
     req = db.session.get(
@@ -513,6 +524,9 @@ def scan_friend_image():
             _, conversation = add_friend(current_user, target)
         except ValueError as exc:
             return jsonify({'ok': False, 'error': str(exc)}), 400
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify({'ok': False, 'error': 'Already friends.'}), 400
         db.session.delete(their_request)
         db.session.commit()
         full_conv = db.session.get(
@@ -545,9 +559,13 @@ def scan_friend_image():
 
     _clear_stale_friend_requests_between(current_user.id, target_id)
 
-    req = FriendRequest(sender_id=current_user.id, receiver_id=target_id, status='pending')
-    db.session.add(req)
-    db.session.commit()
+    try:
+        req = FriendRequest(sender_id=current_user.id, receiver_id=target_id, status='pending')
+        db.session.add(req)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': 'Request already sent.'}), 400
 
     req = db.session.get(
         FriendRequest, req.id,

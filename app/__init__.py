@@ -14,6 +14,7 @@ from flask_jwt_extended import (
 
 from .blueprints.api import api_bp
 from .blueprints.auth import auth_bp
+from .blueprints.docs import docs_bp
 from .blueprints.pages import pages_bp
 from .config import Config
 from .extensions import db, jwt, limiter, socketio
@@ -39,6 +40,7 @@ def create_app(config_object: type[Config] = Config) -> Flask:
     app.register_blueprint(pages_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(docs_bp)
 
     _register_jwt_handlers(app)
     _register_app_hooks(app)
@@ -185,6 +187,13 @@ def _register_app_hooks(app: Flask) -> None:
 
 
 def _register_error_handlers(app: Flask) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    @app.errorhandler(IntegrityError)
+    def integrity_error(error):
+        db.session.rollback()
+        return _error_response(error, 400, default_message='The request conflicts with existing data.')
+
     @app.errorhandler(ValueError)
     def value_error(error):
         return _error_response(error, 400)
