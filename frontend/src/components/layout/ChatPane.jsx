@@ -41,7 +41,7 @@ export default function ChatPane() {
               <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
             </svg>
           </div>
-          <h2>Pentastic</h2>
+          <h2>GrayHat</h2>
           <p>Select a conversation or add a friend to get started.</p>
         </div>
       </div>

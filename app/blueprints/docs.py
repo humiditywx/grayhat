@@ -13,7 +13,7 @@ _HTML = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Pentastic API Docs</title>
+  <title>GrayHat API Docs</title>
   <link rel="stylesheet" type="text/css" href="{_CDN}/swagger-ui.css">
   <link rel="icon" type="image/png" href="{_CDN}/favicon-32x32.png" sizes="32x32">
   <link rel="icon" type="image/png" href="{_CDN}/favicon-16x16.png" sizes="16x16">

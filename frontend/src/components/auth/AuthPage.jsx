@@ -9,7 +9,7 @@ export default function AuthPage() {
   return (
     <div className="auth-page">
       <div className="auth-card card">
-        <div className="auth-logo">Pentastic</div>
+        <div className="auth-logo">GrayHat</div>
         <div className="auth-tagline">Connect with friends instantly.</div>
 
         <div className="auth-tabs">

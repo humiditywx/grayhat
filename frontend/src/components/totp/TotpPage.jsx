@@ -48,7 +48,7 @@ export default function TotpPage() {
   return (
     <div className="auth-page">
       <div className="auth-card card totp-card">
-        <div className="auth-logo" style={{ marginBottom: 4 }}>Pentastic</div>
+        <div className="auth-logo" style={{ marginBottom: 4 }}>GrayHat</div>
         <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, marginBottom: 4 }}>Set up 2-Factor Auth</h2>
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)', marginBottom: 20 }}>
           Scan the QR code with your authenticator app, then save your recovery codes.

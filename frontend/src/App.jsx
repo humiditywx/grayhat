@@ -95,7 +95,7 @@ function AppInner() {
     return (
       <div className="loading-screen" style={{ minHeight: '100vh' }}>
         <div className="spinner spinner-lg" />
-        <span style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>Loading Pentastic…</span>
+        <span style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>Loading GrayHat…</span>
       </div>
     )
   }

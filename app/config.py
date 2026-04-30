@@ -24,7 +24,7 @@ def _split_csv(value: str | None) -> list[str]:
 
 
 class Config:
-    APP_NAME = os.getenv('APP_NAME', 'Pentastic')
+    APP_NAME = os.getenv('APP_NAME', 'GrayHat')
     SECRET_KEY = os.getenv('SECRET_KEY', 'development-secret-key-change-this')
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', SECRET_KEY)
     PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
@@ -50,7 +50,7 @@ class Config:
     USERNAME_MIN_LENGTH = int(os.getenv('USERNAME_MIN_LENGTH', '3'))
     USERNAME_MAX_LENGTH = int(os.getenv('USERNAME_MAX_LENGTH', '24'))
 
-    TOTP_ISSUER = os.getenv('TOTP_ISSUER', 'Pentastic')
+    TOTP_ISSUER = os.getenv('TOTP_ISSUER', 'GrayHat')
     TOTP_ENCRYPTION_KEY = os.getenv('TOTP_ENCRYPTION_KEY', '')
     TOTP_VALID_WINDOW = int(os.getenv('TOTP_VALID_WINDOW', '1'))
 

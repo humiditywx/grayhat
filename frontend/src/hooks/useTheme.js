@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-const STORAGE_KEY = 'pentastic-theme'
+const STORAGE_KEY = 'grayhat-theme'
 
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme)

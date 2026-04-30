@@ -1,0 +1,182 @@
+diff --git a/app/services/storage.py b/app/services/storage.py
+index bb63372..cd242a4 100755
+--- a/app/services/storage.py
++++ b/app/services/storage.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
++import mimetypes
+ from pathlib import Path
+ from uuid import uuid4
+ 
+@@ -16,21 +17,45 @@ ALLOWED_EXTENSIONS = {
+ }
+ 
+ 
+-def extension_for(filename: str) -> str:
++PREFERRED_MIME_EXTENSIONS = {
++    'image/jpeg': 'jpg',
++    'audio/mp4': 'm4a',
++    'audio/aac': 'm4a',
++    'audio/webm': 'webm',
++    'video/webm': 'webm',
++}
++
++VOICE_MESSAGE_TYPES = {'voice', 'voice_note'}
++
++
++def extension_for(filename: str, content_type: str | None = None) -> str:
+     name = secure_filename(filename)
+-    if '.' not in name:
++    if '.' in name:
++        return name.rsplit('.', 1)[1].lower()
++
++    normalized_type = (content_type or '').split(';', 1)[0].strip().lower()
++    if not normalized_type:
++        return ''
++
++    preferred = PREFERRED_MIME_EXTENSIONS.get(normalized_type)
++    if preferred:
++        return preferred
++
++    guessed = mimetypes.guess_extension(normalized_type) or ''
++    if not guessed:
+         return ''
+-    return name.rsplit('.', 1)[1].lower()
++    return guessed.lstrip('.').lower()
+ 
+ 
+-def validate_upload(file: FileStorage) -> None:
+-    ext = extension_for(file.filename or '')
++def validate_upload(file: FileStorage) -> str:
++    ext = extension_for(file.filename or '', file.mimetype)
+     if not ext or ext not in ALLOWED_EXTENSIONS:
+         raise ValueError('This file type is not allowed.')
++    return ext
+ 
+ 
+ def classify_file(content_type: str, explicit_type: str | None = None) -> str:
+-    if explicit_type == 'voice':
++    if explicit_type in VOICE_MESSAGE_TYPES:
+         return 'voice'
+     if content_type.startswith('image/'):
+         return 'image'
+@@ -57,11 +82,10 @@ def classify_file(content_type: str, explicit_type: str | None = None) -> str:
+ 
+ 
+ def save_upload(file: FileStorage) -> tuple[str, str, int, str]:
+-    validate_upload(file)
++    ext = validate_upload(file)
+     upload_root = Path(current_app.config['UPLOAD_ROOT'])
+     upload_root.mkdir(parents=True, exist_ok=True)
+ 
+-    ext = extension_for(file.filename or '')
+     storage_name = f'{uuid4()}.{ext}' if ext else str(uuid4())
+     target = upload_root / storage_name
+     file.save(target)
+diff --git a/app/blueprints/api.py b/app/blueprints/api.py
+index eb43c6c..2624159 100644
+--- a/app/blueprints/api.py
++++ b/app/blueprints/api.py
+@@ -725,7 +725,7 @@ def upload_attachment(conversation_id: str):
+     if file is None:
+         return jsonify({'ok': False, 'error': 'Choose a file to upload.'}), 400
+ 
+-    explicit_type = (request.form.get('message_type') or '').strip() or None
++    explicit_type = (request.form.get('message_type') or '').strip().lower() or None
+     body = (request.form.get('body') or '').strip() or None
+ 
+     try:
+@@ -734,7 +734,7 @@ def upload_attachment(conversation_id: str):
+         return jsonify({'ok': False, 'error': str(exc)}), 400
+ 
+     kind = classify_file(content_type, explicit_type=explicit_type)
+-    message_type = 'voice' if explicit_type == 'voice' else kind
++    message_type = kind
+     extra = {}
+     reply_to_id = (request.form.get('reply_to_id') or '').strip()
+     if reply_to_id:
+diff --git a/tests/test_smoke.py b/tests/test_smoke.py
+index ed193a2..ffefa14 100755
+--- a/tests/test_smoke.py
++++ b/tests/test_smoke.py
+@@ -1,11 +1,12 @@
+ from __future__ import annotations
+ 
++import io
+ import unittest
+ 
+ from app import create_app
+ from app.config import TestConfig
+ from app.extensions import db
+-from app.models import Conversation, ConversationParticipant, FriendRequest, Friendship, User
++from app.models import Attachment, Conversation, ConversationParticipant, FriendRequest, Friendship, User
+ from app.services.security import decrypt_secret, verify_totp
+ 
+ 
+@@ -128,6 +129,65 @@ class MessengerSmokeTest(unittest.TestCase):
+         self.assertEqual(resend.json['request']['receiver_id'], alice.id)
+         self.assertEqual(FriendRequest.query.count(), 1)
+ 
++    def test_attachment_upload_accepts_mime_typed_extensionless_file(self):
++        self._register('Alice_123')
++        alice = User.query.filter_by(username_normalized='alice_123').first()
++        self._logout()
++        self._register('Bob_12345')
++
++        private = self.client.post(
++            f'/api/conversations/private/{alice.id}',
++            headers={'X-CSRF-TOKEN': self._csrf()},
++        )
++        self.assertEqual(private.status_code, 200)
++        conversation_id = private.json['conversation']['id']
++
++        upload = self.client.post(
++            f'/api/conversations/{conversation_id}/attachments',
++            data={
++                'file': (io.BytesIO(b'pretend image bytes'), 'picker-photo', 'image/png'),
++            },
++            headers={'X-CSRF-TOKEN': self._csrf()},
++            content_type='multipart/form-data',
++        )
++
++        self.assertEqual(upload.status_code, 201, upload.json)
++        self.assertTrue(upload.json['ok'])
++        self.assertEqual(upload.json['message']['message_type'], 'image')
++        self.assertEqual(upload.json['message']['attachments'][0]['kind'], 'image')
++
++        attachment = Attachment.query.first()
++        self.assertIsNotNone(attachment)
++        self.assertTrue(attachment.storage_name.endswith('.png'))
++
++    def test_voice_note_alias_upload_is_saved_as_voice_message(self):
++        self._register('Alice_123')
++        alice = User.query.filter_by(username_normalized='alice_123').first()
++        self._logout()
++        self._register('Bob_12345')
++
++        private = self.client.post(
++            f'/api/conversations/private/{alice.id}',
++            headers={'X-CSRF-TOKEN': self._csrf()},
++        )
++        self.assertEqual(private.status_code, 200)
++        conversation_id = private.json['conversation']['id']
++
++        upload = self.client.post(
++            f'/api/conversations/{conversation_id}/attachments',
++            data={
++                'file': (io.BytesIO(b'pretend m4a bytes'), 'voice-note.m4a', 'audio/mp4'),
++                'message_type': 'voice_note',
++            },
++            headers={'X-CSRF-TOKEN': self._csrf()},
++            content_type='multipart/form-data',
++        )
++
++        self.assertEqual(upload.status_code, 201, upload.json)
++        self.assertTrue(upload.json['ok'])
++        self.assertEqual(upload.json['message']['message_type'], 'voice')
++        self.assertEqual(upload.json['message']['attachments'][0]['kind'], 'voice')
++
+     def test_add_group_member_from_friend_list(self):
+         self._register('Alice_123')
+         alice = User.query.filter_by(username_normalized='alice_123').first()

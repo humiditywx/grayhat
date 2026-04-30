@@ -269,7 +269,23 @@ export default function Sidebar({ mobileHidden }) {
             </>
           ) : (
             <>
-              <span className="sidebar-logo">Pentastic</span>
+              <span className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                GrayHat
+                <span style={{
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  padding: '2px 7px',
+                  borderRadius: 9999,
+                  background: 'var(--primary)',
+                  color: '#fff',
+                  letterSpacing: '.04em',
+                  WebkitTextFillColor: '#fff',
+                  backgroundClip: 'unset',
+                  WebkitBackgroundClip: 'unset',
+                  lineHeight: 1.6,
+                  alignSelf: 'center',
+                }}>BETA</span>
+              </span>
               <div style={{ display: 'flex', gap: 4 }}>
                 {panel === 'chats' && (
                   <>
