@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import io
 import unittest
 
 from app import create_app
 from app.config import TestConfig
 from app.extensions import db
-from app.models import Conversation, ConversationParticipant, FriendRequest, Friendship, User
+from app.models import Attachment, Conversation, ConversationParticipant, FriendRequest, Friendship, User
 from app.services.security import decrypt_secret, verify_totp
 
 
@@ -127,6 +128,37 @@ class MessengerSmokeTest(unittest.TestCase):
         self.assertEqual(resend.json['request']['sender_id'], bob.id)
         self.assertEqual(resend.json['request']['receiver_id'], alice.id)
         self.assertEqual(FriendRequest.query.count(), 1)
+
+    def test_attachment_upload_accepts_mime_typed_extensionless_file(self):
+        self._register('Alice_123')
+        alice = User.query.filter_by(username_normalized='alice_123').first()
+        self._logout()
+        self._register('Bob_12345')
+
+        private = self.client.post(
+            f'/api/conversations/private/{alice.id}',
+            headers={'X-CSRF-TOKEN': self._csrf()},
+        )
+        self.assertEqual(private.status_code, 200)
+        conversation_id = private.json['conversation']['id']
+
+        upload = self.client.post(
+            f'/api/conversations/{conversation_id}/attachments',
+            data={
+                'file': (io.BytesIO(b'pretend image bytes'), 'picker-photo', 'image/png'),
+            },
+            headers={'X-CSRF-TOKEN': self._csrf()},
+            content_type='multipart/form-data',
+        )
+
+        self.assertEqual(upload.status_code, 201, upload.json)
+        self.assertTrue(upload.json['ok'])
+        self.assertEqual(upload.json['message']['message_type'], 'image')
+        self.assertEqual(upload.json['message']['attachments'][0]['kind'], 'image')
+
+        attachment = Attachment.query.first()
+        self.assertIsNotNone(attachment)
+        self.assertTrue(attachment.storage_name.endswith('.png'))
 
     def test_add_group_member_from_friend_list(self):
         self._register('Alice_123')

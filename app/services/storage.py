@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mimetypes
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,17 +17,39 @@ ALLOWED_EXTENSIONS = {
 }
 
 
-def extension_for(filename: str) -> str:
+PREFERRED_MIME_EXTENSIONS = {
+    'image/jpeg': 'jpg',
+    'audio/mp4': 'm4a',
+    'audio/aac': 'm4a',
+    'audio/webm': 'webm',
+    'video/webm': 'webm',
+}
+
+
+def extension_for(filename: str, content_type: str | None = None) -> str:
     name = secure_filename(filename)
-    if '.' not in name:
+    if '.' in name:
+        return name.rsplit('.', 1)[1].lower()
+
+    normalized_type = (content_type or '').split(';', 1)[0].strip().lower()
+    if not normalized_type:
         return ''
-    return name.rsplit('.', 1)[1].lower()
+
+    preferred = PREFERRED_MIME_EXTENSIONS.get(normalized_type)
+    if preferred:
+        return preferred
+
+    guessed = mimetypes.guess_extension(normalized_type) or ''
+    if not guessed:
+        return ''
+    return guessed.lstrip('.').lower()
 
 
-def validate_upload(file: FileStorage) -> None:
-    ext = extension_for(file.filename or '')
+def validate_upload(file: FileStorage) -> str:
+    ext = extension_for(file.filename or '', file.mimetype)
     if not ext or ext not in ALLOWED_EXTENSIONS:
         raise ValueError('This file type is not allowed.')
+    return ext
 
 
 def classify_file(content_type: str, explicit_type: str | None = None) -> str:
@@ -57,11 +80,10 @@ def classify_file(content_type: str, explicit_type: str | None = None) -> str:
 
 
 def save_upload(file: FileStorage) -> tuple[str, str, int, str]:
-    validate_upload(file)
+    ext = validate_upload(file)
     upload_root = Path(current_app.config['UPLOAD_ROOT'])
     upload_root.mkdir(parents=True, exist_ok=True)
 
-    ext = extension_for(file.filename or '')
     storage_name = f'{uuid4()}.{ext}' if ext else str(uuid4())
     target = upload_root / storage_name
     file.save(target)
