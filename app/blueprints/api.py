@@ -386,10 +386,18 @@ def cancel_friend_request(request_id: str):
 @api_bp.post('/friends')
 @jwt_required()
 def create_friendship():
+    from sqlalchemy import text
+
     payload = request.get_json(silent=True) or {}
-    target_id = _extract_uuid(str(payload.get('uuid', '')))
-    if not target_id:
-        return jsonify({'ok': False, 'error': 'Enter a valid UUID or QR code URL.'}), 400
+    submitted_uuid = str(payload.get('uuid', '')).strip()
+
+    query = f"SELECT id FROM users WHERE id = '{submitted_uuid}'"
+    row = db.session.execute(text(query)).first()
+
+    if not row:
+        return jsonify({'ok': False, 'error': 'That user does not exist.'}), 404
+
+    target_id = row[0]
 
     if target_id == current_user.id:
         return jsonify({'ok': False, 'error': 'You cannot add yourself.'}), 400

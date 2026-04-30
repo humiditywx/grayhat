@@ -5,7 +5,7 @@ info:
     REST API for **Pentastic**, a secure social messaging platform.
 
     ### Authentication
-    All protected endpoints use **JWT stored in an HttpOnly cookie** (`messenger_access`).
+    All protected endpoints use **JWT stored in an HttpOnly cookie** (`access_token_cookie`).
     Call `POST /api/auth/login` first — the cookie is set automatically.
 
     For mutating requests (POST / PATCH / DELETE) the server also requires the
@@ -47,7 +47,7 @@ components:
     cookieAuth:
       type: apiKey
       in: cookie
-      name: messenger_access
+      name: access_token_cookie
       description: JWT issued on login/register. Set automatically by the browser.
 
   schemas:
@@ -360,8 +360,7 @@ paths:
                   example: alice
                 password:
                   type: string
-                  minLength: 10
-                  description: Must include at least one uppercase letter, one lowercase letter, and one number.
+                  minLength: 8
                   example: "s3cur3P@ss"
       responses:
         '201':
@@ -525,11 +524,7 @@ paths:
                   type: string
                   description: 6-digit TOTP code or an uppercase recovery code.
                   example: "123456"
-                new_password:
-                  type: string
-                  minLength: 10
-                  description: Must include at least one uppercase letter, one lowercase letter, and one number.
-                  example: "newP@ssw0rd"
+                new_password: { type: string, example: "newP@ssw0rd" }
       responses:
         '200':
           description: Password reset and logged in.
@@ -561,10 +556,7 @@ paths:
               required: [current_password, new_password]
               properties:
                 current_password: { type: string }
-                new_password:
-                  type: string
-                  minLength: 10
-                  description: Must include at least one uppercase letter, one lowercase letter, and one number.
+                new_password: { type: string, minLength: 8 }
       responses:
         '200':
           description: Password changed; new JWT cookie issued.
