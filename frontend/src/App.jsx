@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react'
+import { useLocale } from './i18n/index.jsx'
 import { AppProvider, useApp } from './context/AppContext.jsx'
 import { SocketProvider } from './context/SocketContext.jsx'
 import { CallProvider } from './context/CallContext.jsx'
@@ -16,6 +17,7 @@ import { authMe, bootstrap, joinGroup, sendFriendRequest } from './api.js'
 
 function AppInner() {
   const { state, dispatch, toast } = useApp()
+  const { t } = useLocale()
 
   // Parse initial route action from URL
   useEffect(() => {
@@ -95,7 +97,7 @@ function AppInner() {
     return (
       <div className="loading-screen" style={{ minHeight: '100vh' }}>
         <div className="spinner spinner-lg" />
-        <span style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>Loading GrayHat…</span>
+        <span style={{ color: 'var(--text-3)', fontSize: 'var(--text-sm)' }}>{t('loading')}</span>
       </div>
     )
   }

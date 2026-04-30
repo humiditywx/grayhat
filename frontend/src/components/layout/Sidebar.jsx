@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
+import { useLocale } from '../../i18n/index.jsx'
 import Avatar from '../common/Avatar.jsx'
 import StoryBar from '../stories/StoryBar.jsx'
 import StoryViewer from '../stories/StoryViewer.jsx'
@@ -214,6 +215,7 @@ function CameraActionModal({ file, onClose, dispatch, toast, conversations }) {
 
 export default function Sidebar({ mobileHidden }) {
   const { state, dispatch, toast } = useApp()
+  const { t } = useLocale()
   const [storyGroupIndex, setStoryGroupIndex] = useState(null)
   const [cameraFile, setCameraFile] = useState(null)
   const [search, setSearch] = useState('')
@@ -259,12 +261,12 @@ export default function Sidebar({ mobileHidden }) {
                   <polyline points="15 18 9 12 15 6"/>
                 </svg>
               </button>
-              <span className="sidebar-logo" style={{ flex: 1 }}>Inbox</span>
+              <span className="sidebar-logo" style={{ flex: 1 }}>{t('inboxTitle')}</span>
               <button
                 className="btn btn-primary btn-sm"
                 onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}
               >
-                + Add Friend
+                {t('addFriend')}
               </button>
             </>
           ) : (
@@ -326,7 +328,7 @@ export default function Sidebar({ mobileHidden }) {
                 <input
                   className="chat-search"
                   type="text"
-                  placeholder="Search chats…"
+                  placeholder={t('searchChats')}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -366,17 +368,17 @@ export default function Sidebar({ mobileHidden }) {
                   </div>
                   <div className="conv-item-info">
                     <div className="conv-item-top">
-                      <span className="conv-item-name">Friend Requests</span>
+                      <span className="conv-item-name">{t('friendRequests')}</span>
                       {inboxCount > 0 && (
                         <span className="conv-item-time" style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                          {inboxCount} new
+                          {t('newLabel', { n: inboxCount })}
                         </span>
                       )}
                     </div>
                     <div className="conv-item-preview">
                       {inboxCount > 0
-                        ? `${inboxCount} pending request${inboxCount > 1 ? 's' : ''}`
-                        : 'No pending requests'}
+                        ? t(inboxCount > 1 ? 'pendingRequestsPlural' : 'pendingRequests', { n: inboxCount })
+                        : t('noPendingShort')}
                     </div>
                   </div>
                 </div>
@@ -385,7 +387,7 @@ export default function Sidebar({ mobileHidden }) {
               {/* All conversations: private + groups, sorted by recency */}
               {filteredConvs.length === 0 && (
                 <div style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 'var(--text-sm)', padding: '32px 16px' }}>
-                  {search ? 'No results.' : <span>No chats yet.<br />Add a friend to start messaging!</span>}
+                  {search ? t('noResults') : <span>{t('noChatsYet').split('\n').map((line, i) => i === 0 ? line : <><br key={i} />{line}</>)}</span>}
                 </div>
               )}
               {filteredConvs.map((c) => {
@@ -418,8 +420,8 @@ export default function Sidebar({ mobileHidden }) {
                       </div>
                       <div className="conv-item-preview">
                         {typing.length
-                          ? <span style={{ color: 'var(--primary)', fontStyle: 'italic' }}>{typing[0]} is typing…</span>
-                          : c.last_message_preview || (isGroup ? `${c.member_count ?? ''} members`.trim() : 'Start a conversation')}
+                          ? <span style={{ color: 'var(--primary)', fontStyle: 'italic' }}>{t('isTyping', { name: typing[0] })}</span>
+                          : c.last_message_preview || (isGroup ? t('members', { n: c.member_count ?? '' }) : t('startConversation'))}
                       </div>
                     </div>
                   </div>
@@ -436,14 +438,14 @@ export default function Sidebar({ mobileHidden }) {
         <nav className="sidebar-nav">
           <button className={`nav-tab${panel === 'chats' ? ' active' : ''}`} onClick={goToChats}>
             <ChatIcon active={panel === 'chats'} />
-            Chats
+            {t('chats')}
           </button>
 
           {/* Center camera button */}
           <button
             className="nav-tab nav-tab-qr"
             onClick={() => cameraInputRef.current?.click()}
-            title="Camera"
+            title={t('camera')}
           >
             <div className="nav-qr-btn">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -451,7 +453,7 @@ export default function Sidebar({ mobileHidden }) {
                 <circle cx="12" cy="13" r="4"/>
               </svg>
             </div>
-            Camera
+            {t('camera')}
           </button>
           <input
             ref={cameraInputRef}
@@ -466,7 +468,7 @@ export default function Sidebar({ mobileHidden }) {
             <div className={`nav-avatar-wrap${panel === 'profile' ? ' active' : ''}`}>
               <Avatar user={state.me} size="xs" />
             </div>
-            Profile
+            {t('profile')}
           </button>
         </nav>
       </div>

@@ -1,22 +1,24 @@
 import { useState } from 'react'
 import Avatar from '../common/Avatar.jsx'
 import { useApp } from '../../context/AppContext.jsx'
+import { useLocale } from '../../i18n/index.jsx'
 import { acceptFriendRequest, declineFriendRequest, cancelFriendRequest } from '../../api.js'
 
-function fmtTime(iso) {
+function fmtTime(iso, t) {
   if (!iso) return ''
   const d = new Date(iso)
   const diff = Date.now() - d
-  if (diff < 60000) return 'Just now'
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
+  if (diff < 60000) return t('justNow')
+  if (diff < 3600000) return t('minutesAgo', { n: Math.floor(diff / 60000) })
+  if (diff < 86400000) return t('hoursAgo', { n: Math.floor(diff / 3600000) })
   return d.toLocaleDateString()
 }
 
 export default function InboxPanel({ hideHeader = false }) {
   const { state, dispatch, toast } = useApp()
+  const { t } = useLocale()
   const [tab, setTab] = useState('received')
-  const [busy, setBusy] = useState(null) // requestId being processed
+  const [busy, setBusy] = useState(null)
 
   const incoming = state.friendRequests?.incoming || []
   const outgoing = state.friendRequests?.outgoing || []
@@ -44,7 +46,7 @@ export default function InboxPanel({ hideHeader = false }) {
     try {
       await declineFriendRequest(req.id)
       dispatch({ type: 'REMOVE_INCOMING_REQUEST', requestId: req.id })
-      toast('Request declined.', 'info')
+      toast(t('requestDeclined'), 'info')
     } catch (err) {
       toast(err.message, 'error')
     } finally {
@@ -58,7 +60,7 @@ export default function InboxPanel({ hideHeader = false }) {
     try {
       await cancelFriendRequest(req.id)
       dispatch({ type: 'REMOVE_OUTGOING_REQUEST', requestId: req.id })
-      toast('Request cancelled.', 'info')
+      toast(t('requestCancelled'), 'info')
     } catch (err) {
       toast(err.message, 'error')
     } finally {
@@ -70,29 +72,28 @@ export default function InboxPanel({ hideHeader = false }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {!hideHeader && (
         <div className="panel-header">
-          <span className="panel-title">Inbox</span>
+          <span className="panel-title">{t('inboxTitle')}</span>
           <button
             className="btn btn-primary btn-sm"
             onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}
           >
-            + Add Friend
+            {t('addFriend')}
           </button>
         </div>
       )}
 
-      {/* Tab pills */}
       <div className="inbox-tabs">
         <button
           className={`inbox-tab-pill${tab === 'received' ? ' active' : ''}`}
           onClick={() => setTab('received')}
         >
-          Received {incoming.length > 0 && <span className="inbox-tab-badge">{incoming.length}</span>}
+          {t('received')} {incoming.length > 0 && <span className="inbox-tab-badge">{incoming.length}</span>}
         </button>
         <button
           className={`inbox-tab-pill${tab === 'sent' ? ' active' : ''}`}
           onClick={() => setTab('sent')}
         >
-          Sent {outgoing.length > 0 && <span className="inbox-tab-badge">{outgoing.length}</span>}
+          {t('sent')} {outgoing.length > 0 && <span className="inbox-tab-badge">{outgoing.length}</span>}
         </button>
       </div>
 
@@ -101,7 +102,7 @@ export default function InboxPanel({ hideHeader = false }) {
           <>
             {incoming.length === 0 && (
               <div style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 'var(--text-sm)', padding: '40px 20px' }}>
-                No pending friend requests.
+                {t('noPendingRequests')}
               </div>
             )}
             {incoming.map((req) => (
@@ -109,14 +110,13 @@ export default function InboxPanel({ hideHeader = false }) {
                 <Avatar user={req.other_user} size="md" />
                 <div className="req-item-info">
                   <div className="req-item-name">{req.other_user.username}</div>
-                  <div className="req-item-sub">Wants to be your friend · {fmtTime(req.created_at)}</div>
+                  <div className="req-item-sub">{t('wantsFriend')} · {fmtTime(req.created_at, t)}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   <button
                     className="req-action-decline"
                     onClick={() => handleDecline(req)}
                     disabled={busy === req.id}
-                    title="Decline"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -126,7 +126,6 @@ export default function InboxPanel({ hideHeader = false }) {
                     className="req-action-accept"
                     onClick={() => handleAccept(req)}
                     disabled={busy === req.id}
-                    title="Accept"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <polyline points="20 6 9 17 4 12"/>
@@ -142,7 +141,7 @@ export default function InboxPanel({ hideHeader = false }) {
           <>
             {outgoing.length === 0 && (
               <div style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 'var(--text-sm)', padding: '40px 20px' }}>
-                No sent requests.
+                {t('noSentRequests')}
               </div>
             )}
             {outgoing.map((req) => (
@@ -150,13 +149,12 @@ export default function InboxPanel({ hideHeader = false }) {
                 <Avatar user={req.other_user} size="md" />
                 <div className="req-item-info">
                   <div className="req-item-name">{req.other_user.username}</div>
-                  <div className="req-item-sub">Request pending · {fmtTime(req.created_at)}</div>
+                  <div className="req-item-sub">{t('requestPending')} · {fmtTime(req.created_at, t)}</div>
                 </div>
                 <button
                   className="btn-icon"
                   onClick={() => handleCancel(req)}
                   disabled={busy === req.id}
-                  title="Cancel request"
                   style={{ color: 'var(--text-3)', flexShrink: 0 }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

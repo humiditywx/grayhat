@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { sendMessage, sendAttachment } from '../../api.js'
 import { useSocket } from '../../context/SocketContext.jsx'
+import { useLocale } from '../../i18n/index.jsx'
 
 export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
   const [text, setText] = useState('')
@@ -13,6 +14,7 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
   const chunksRef = useRef([])
   const typingTimerRef = useRef(null)
   const { startTyping, stopTyping } = useSocket()
+  const { t } = useLocale()
 
   const autoResize = () => {
     const el = textareaRef.current
@@ -109,7 +111,7 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
   }
 
   const replyPreview = replyTo
-    ? (replyTo.message_type === 'text' ? replyTo.body : replyTo.message_type === 'voice' ? 'Voice message' : 'Attachment')
+    ? (replyTo.message_type === 'text' ? replyTo.body : replyTo.message_type === 'voice' ? t('voiceMessage') : t('attachment'))
     : null
 
   return (
@@ -147,7 +149,7 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
           <textarea
             ref={textareaRef}
             className="composer-textarea"
-            placeholder="Message…"
+            placeholder={t('messagePlaceholder')}
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKey}
@@ -158,7 +160,7 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
             type="button"
             onPointerDown={startRecording}
             onPointerUp={recording ? stopRecording : undefined}
-            title={recording ? 'Release to send' : 'Hold to record'}
+            title={recording ? t('releaseToSend') : t('holdToRecord')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>

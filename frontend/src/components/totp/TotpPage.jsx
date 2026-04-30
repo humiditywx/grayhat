@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
+import { useLocale } from '../../i18n/index.jsx'
 import { totpSetup, totpConfirm } from '../../api.js'
 
 export default function TotpPage() {
-  const { state, dispatch, toast } = useApp()
-  const [step, setStep] = useState('loading') // 'loading' | 'setup' | 'confirm'
+  const { dispatch, toast } = useApp()
+  const { t } = useLocale()
+  const [step, setStep] = useState('loading')
   const [qrCode, setQrCode] = useState('')
   const [recoveryCodes, setRecoveryCodes] = useState([])
   const [code, setCode] = useState('')
@@ -40,7 +42,7 @@ export default function TotpPage() {
   if (step === 'loading') {
     return (
       <div className="auth-page">
-        <div className="loading-screen"><div className="spinner spinner-lg" /><span>Setting up 2FA…</span></div>
+        <div className="loading-screen"><div className="spinner spinner-lg" /><span>{t('loadingDots')}</span></div>
       </div>
     )
   }
@@ -49,9 +51,9 @@ export default function TotpPage() {
     <div className="auth-page">
       <div className="auth-card card totp-card">
         <div className="auth-logo" style={{ marginBottom: 4 }}>GrayHat</div>
-        <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, marginBottom: 4 }}>Set up 2-Factor Auth</h2>
+        <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700, marginBottom: 4 }}>{t('setup2faTitle')}</h2>
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)', marginBottom: 20 }}>
-          Scan the QR code with your authenticator app, then save your recovery codes.
+          {t('setup2faDesc')}
         </p>
 
         {qrCode && (
@@ -61,7 +63,7 @@ export default function TotpPage() {
         )}
 
         <div style={{ margin: '20px 0 8px', fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-2)' }}>
-          Recovery codes — save these somewhere safe:
+          {t('recoveryCodesLabel')}
         </div>
         <div className="recovery-grid">
           {recoveryCodes.map((c) => (
@@ -75,20 +77,20 @@ export default function TotpPage() {
             style={{ width: '100%', marginBottom: 12 }}
             onClick={() => { navigator.clipboard.writeText(recoveryCodes.join('\n')).catch(() => {}); setSavedCodes(true) }}
           >
-            {savedCodes ? '✓ Copied!' : 'Copy recovery codes'}
+            {savedCodes ? t('copied') : t('copyRecoveryCodes')}
           </button>
         )}
 
         {step === 'setup' && (
           <button className="btn btn-primary" style={{ width: '100%', marginBottom: 8 }} onClick={() => setStep('confirm')}>
-            I've saved my codes — continue
+            {t('verify')}
           </button>
         )}
 
         {step === 'confirm' && (
           <form onSubmit={confirm} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
             <div className="field">
-              <label className="field-label">Enter the 6-digit code from your app</label>
+              <label className="field-label">{t('enterCode')}</label>
               <input
                 className="field-input"
                 type="text"
@@ -101,13 +103,13 @@ export default function TotpPage() {
               />
             </div>
             <button className="btn btn-primary" disabled={busy || code.length !== 6}>
-              {busy ? 'Verifying…' : 'Enable 2FA'}
+              {busy ? t('verifying') : t('enableTwoFa')}
             </button>
           </form>
         )}
 
         <button className="btn btn-ghost" style={{ width: '100%', marginTop: 8 }} onClick={skip}>
-          Skip for now
+          {t('skip')}
         </button>
       </div>
     </div>

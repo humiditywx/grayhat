@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import Avatar from '../common/Avatar.jsx'
 import { useApp } from '../../context/AppContext.jsx'
+import { useLocale, SUPPORTED_LOCALES } from '../../i18n/index.jsx'
 import { uploadAvatar, passwordChange, authLogout, totpSetup, totpConfirm } from '../../api.js'
 import { useTheme } from '../../hooks/useTheme.js'
 
@@ -10,6 +11,7 @@ export default function SettingsPanel() {
   const [section, setSection] = useState(null)
   const avatarRef = useRef(null)
   const { isDark, toggle: toggleTheme } = useTheme()
+  const { t, locale, setLocale } = useLocale()
 
   const pickAvatar = async (e) => {
     const file = e.target.files?.[0]
@@ -33,7 +35,7 @@ export default function SettingsPanel() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div className="panel-header">
-        <span className="panel-title">Settings</span>
+        <span className="panel-title">{t('settingsTitle')}</span>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -63,13 +65,13 @@ export default function SettingsPanel() {
               className="btn btn-ghost btn-sm"
               onClick={() => navigator.clipboard.writeText(me?.id || '').then(() => toast('UUID copied!', 'success'))}
             >
-              Copy UUID
+              {t('copyUUID')}
             </button>
           </div>
         </div>
 
         <div className="settings-section">
-          <div className="settings-section-title">Appearance</div>
+          <div className="settings-section-title">{t('appearance')}</div>
           <div className="settings-row" onClick={toggleTheme} style={{ cursor: 'pointer' }}>
             <div className="settings-row-icon">
               {isDark
@@ -78,17 +80,53 @@ export default function SettingsPanel() {
               }
             </div>
             <div className="settings-row-info">
-              <div className="settings-row-label">Dark Mode</div>
-              <div className="settings-row-value">{isDark ? 'On' : 'Off'}</div>
+              <div className="settings-row-label">{t('darkMode')}</div>
+              <div className="settings-row-value">{isDark ? t('on') : t('off')}</div>
             </div>
             <div className={`theme-toggle${isDark ? ' on' : ''}`}>
               <div className="theme-toggle-thumb" />
             </div>
           </div>
+
+          {/* Language */}
+          <div className="settings-row" style={{ cursor: 'default' }}>
+            <div className="settings-row-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="2" y1="12" x2="22" y2="12"/>
+                <path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/>
+              </svg>
+            </div>
+            <div className="settings-row-info">
+              <div className="settings-row-label">{t('language')}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {SUPPORTED_LOCALES.map((l) => (
+                <button
+                  key={l.code}
+                  onClick={() => setLocale(l.code)}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 9999,
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 600,
+                    border: '1.5px solid',
+                    borderColor: locale === l.code ? 'var(--primary)' : 'var(--border)',
+                    background: locale === l.code ? 'var(--primary)' : 'transparent',
+                    color: locale === l.code ? '#fff' : 'var(--text-2)',
+                    cursor: 'pointer',
+                    transition: 'all 120ms',
+                  }}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="settings-section">
-          <div className="settings-section-title">Account</div>
+          <div className="settings-section-title">{t('account')}</div>
 
           <div className="settings-row" onClick={() => setSection(section === 'password' ? null : 'password')}>
             <div className="settings-row-icon">
@@ -97,11 +135,11 @@ export default function SettingsPanel() {
               </svg>
             </div>
             <div className="settings-row-info">
-              <div className="settings-row-label">Change Password</div>
+              <div className="settings-row-label">{t('changePassword')}</div>
             </div>
             <span className="settings-chevron">›</span>
           </div>
-          {section === 'password' && <ChangePasswordForm toast={toast} dispatch={dispatch} />}
+          {section === 'password' && <ChangePasswordForm toast={toast} dispatch={dispatch} t={t} />}
 
           <div className="settings-row" onClick={() => setSection(section === 'totp' ? null : 'totp')}>
             <div className="settings-row-icon">
@@ -110,25 +148,25 @@ export default function SettingsPanel() {
               </svg>
             </div>
             <div className="settings-row-info">
-              <div className="settings-row-label">Two-Factor Authentication</div>
-              <div className="settings-row-value">{me?.totp_enabled ? 'Enabled' : 'Not set up'}</div>
+              <div className="settings-row-label">{t('twoFactor')}</div>
+              <div className="settings-row-value">{me?.totp_enabled ? t('twoFactorEnabled') : t('twoFactorNotSetUp')}</div>
             </div>
             <span className="settings-chevron">›</span>
           </div>
-          {section === 'totp' && <TotpSection toast={toast} dispatch={dispatch} />}
+          {section === 'totp' && <TotpSection toast={toast} dispatch={dispatch} t={t} />}
         </div>
 
         <div className="settings-section">
-          <div className="settings-section-title">Your QR Code</div>
+          <div className="settings-section-title">{t('yourQr')}</div>
           <div style={{ padding: '12px 0' }}>
             <img src="/api/users/me/qr.png" alt="My QR code" style={{ width: 160, height: 160, borderRadius: 12, border: '2px solid var(--border-light)' }} />
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 8 }}>Friends can scan this to add you.</p>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: 8 }}>{t('qrHint')}</p>
           </div>
         </div>
 
         <div className="settings-section" style={{ paddingBottom: 24 }}>
           <button className="btn btn-danger" style={{ width: '100%', marginTop: 12 }} onClick={logout}>
-            Sign Out
+            {t('signOut')}
           </button>
         </div>
       </div>
@@ -136,13 +174,13 @@ export default function SettingsPanel() {
   )
 }
 
-function ChangePasswordForm({ toast, dispatch }) {
+function ChangePasswordForm({ toast, dispatch, t }) {
   const [form, setForm] = useState({ current_password: '', new_password: '', confirm: '' })
   const [busy, setBusy] = useState(false)
 
   const handle = async (e) => {
     e.preventDefault()
-    if (form.new_password !== form.confirm) { toast('Passwords do not match.', 'error'); return }
+    if (form.new_password !== form.confirm) { toast(t('passwordsNoMatch'), 'error'); return }
     setBusy(true)
     try {
       const data = await passwordChange({ current_password: form.current_password, new_password: form.new_password })
@@ -158,20 +196,20 @@ function ChangePasswordForm({ toast, dispatch }) {
 
   return (
     <form onSubmit={handle} style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 0 12px' }}>
-      {[['Current Password', 'current_password'], ['New Password', 'new_password'], ['Confirm New Password', 'confirm']].map(([label, key]) => (
+      {[[t('currentPassword'), 'current_password'], [t('newPassword'), 'new_password'], [t('confirmNewPassword'), 'confirm']].map(([label, key]) => (
         <div className="field" key={key}>
           <label className="field-label">{label}</label>
           <input className="field-input" type="password" value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
         </div>
       ))}
       <button className="btn btn-primary btn-sm" disabled={busy}>
-        {busy ? 'Saving…' : 'Update Password'}
+        {busy ? t('saving') : t('updatePassword')}
       </button>
     </form>
   )
 }
 
-function TotpSection({ toast }) {
+function TotpSection({ toast, t }) {
   const [data, setData] = useState(null)
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -198,7 +236,7 @@ function TotpSection({ toast }) {
     return (
       <div style={{ padding: '8px 0 12px' }}>
         <button className="btn btn-primary btn-sm" onClick={setup} disabled={busy}>
-          {busy ? 'Loading…' : 'Set up 2FA'}
+          {busy ? t('loadingDots') : t('setupTwoFa')}
         </button>
       </div>
     )
@@ -208,11 +246,11 @@ function TotpSection({ toast }) {
     <div style={{ padding: '8px 0 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <img src={data.qr_code} alt="QR" style={{ width: 160, height: 160, borderRadius: 12 }} />
       <div className="field">
-        <label className="field-label">Enter 6-digit code to confirm</label>
+        <label className="field-label">{t('confirmCode')}</label>
         <input className="field-input" type="text" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
       </div>
       <button className="btn btn-primary btn-sm" onClick={confirm} disabled={busy || code.length !== 6}>
-        {busy ? 'Verifying…' : 'Enable 2FA'}
+        {busy ? t('verifying') : t('enableTwoFa')}
       </button>
     </div>
   )

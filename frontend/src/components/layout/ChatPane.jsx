@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useCall } from '../../context/CallContext.jsx'
+import { useLocale } from '../../i18n/index.jsx'
 import Avatar from '../common/Avatar.jsx'
 import MessageList from '../messages/MessageList.jsx'
 import Composer from '../messages/Composer.jsx'
@@ -24,6 +25,7 @@ function fmtLastSeen(iso) {
 export default function ChatPane() {
   const { state, dispatch, toast } = useApp()
   const { startCall } = useCall()
+  const { t } = useLocale()
   const [replyTo, setReplyTo] = useState(null)
   const [sentMessages, setSentMessages] = useState([])
 
@@ -42,7 +44,7 @@ export default function ChatPane() {
             </svg>
           </div>
           <h2>GrayHat</h2>
-          <p>Select a conversation or add a friend to get started.</p>
+          <p>{t('selectConversation')}</p>
         </div>
       </div>
     )
@@ -62,7 +64,7 @@ export default function ChatPane() {
   }
 
   const handleLeave = async () => {
-    if (!confirm(`Leave "${conv.title}"?`)) return
+    if (!confirm(t('leaveConfirm', { title: conv.title }))) return
     try {
       await leaveConv(conv.id)
       dispatch({ type: 'REMOVE_CONVERSATION', convId: conv.id })
@@ -114,11 +116,11 @@ export default function ChatPane() {
           <div className="chat-header-sub">
             {isPrivate
               ? online
-                ? <span style={{ color:'#22C55E' }}>Online</span>
+                ? <span style={{ color:'#22C55E' }}>{t('online')}</span>
                 : partner?.last_seen_at
                   ? `Last seen ${fmtLastSeen(partner.last_seen_at)}`
-                  : 'Offline'
-              : `${conv.member_count} members`
+                  : t('off')
+              : t('members', { n: conv.member_count })
             }
           </div>
         </div>
