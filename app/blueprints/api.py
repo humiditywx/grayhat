@@ -725,7 +725,7 @@ def upload_attachment(conversation_id: str):
     if file is None:
         return jsonify({'ok': False, 'error': 'Choose a file to upload.'}), 400
 
-    explicit_type = (request.form.get('message_type') or '').strip() or None
+    explicit_type = (request.form.get('message_type') or '').strip().lower() or None
     body = (request.form.get('body') or '').strip() or None
 
     try:
@@ -734,7 +734,7 @@ def upload_attachment(conversation_id: str):
         return jsonify({'ok': False, 'error': str(exc)}), 400
 
     kind = classify_file(content_type, explicit_type=explicit_type)
-    message_type = 'voice' if explicit_type == 'voice' else kind
+    message_type = kind
     extra = {}
     reply_to_id = (request.form.get('reply_to_id') or '').strip()
     if reply_to_id:

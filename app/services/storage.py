@@ -25,6 +25,8 @@ PREFERRED_MIME_EXTENSIONS = {
     'video/webm': 'webm',
 }
 
+VOICE_MESSAGE_TYPES = {'voice', 'voice_note'}
+
 
 def extension_for(filename: str, content_type: str | None = None) -> str:
     name = secure_filename(filename)
@@ -53,7 +55,7 @@ def validate_upload(file: FileStorage) -> str:
 
 
 def classify_file(content_type: str, explicit_type: str | None = None) -> str:
-    if explicit_type == 'voice':
+    if explicit_type in VOICE_MESSAGE_TYPES:
         return 'voice'
     if content_type.startswith('image/'):
         return 'image'
