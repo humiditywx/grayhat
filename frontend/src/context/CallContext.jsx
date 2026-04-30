@@ -180,6 +180,8 @@ export function CallProvider({ children }) {
     dispatch({ type: 'CALL_ENDED' })
   }, [emit, cleanupAll])
 
+  const stopAllCallSounds = useCallback(() => {}, [])
+
   const declineCall = useCallback(() => {
     if (call.incomingCall) {
       emit('call:decline', {
