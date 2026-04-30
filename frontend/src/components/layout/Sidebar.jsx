@@ -269,8 +269,21 @@ export default function Sidebar({ mobileHidden }) {
             </>
           ) : (
             <>
-              <span className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                GrayHat
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--primary)', flexShrink: 0 }} aria-hidden="true">
+                  {/* Chat bubble arc */}
+                  <path d="M16 4.5C13.5 3.2 10.5 3 8 4.5C5.5 6 4 8.8 4 12C4 14.8 5.2 17.2 7.5 18.8L5.5 21.5L10.5 20C11.5 20.3 12.5 20.5 13.5 20.5C17 20.5 20 18.5 21 16"
+                    stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  {/* Top-right circle */}
+                  <circle cx="20" cy="5" r="2.5" stroke="currentColor" strokeWidth="2.2"/>
+                  {/* Hat brim */}
+                  <path d="M8 16.5C8 15.7 9.8 15 12 15C14.2 15 16 15.7 16 16.5C16 17.3 14.2 18 12 18C9.8 18 8 17.3 8 16.5Z" fill="currentColor"/>
+                  {/* Hat crown */}
+                  <path d="M10 16L10 12.8Q10 11 12 11Q14 11 14 12.8L14 16Z" fill="currentColor"/>
+                  {/* Hat band */}
+                  <line x1="10" y1="13.8" x2="14" y2="13.8" stroke="white" strokeWidth="0.8" strokeLinecap="round"/>
+                </svg>
+                <span className="sidebar-logo">GrayHat</span>
                 <span style={{
                   fontSize: '10px',
                   fontWeight: 700,
@@ -285,7 +298,7 @@ export default function Sidebar({ mobileHidden }) {
                   lineHeight: 1.6,
                   alignSelf: 'center',
                 }}>BETA</span>
-              </span>
+              </div>
               <div style={{ display: 'flex', gap: 4 }}>
                 {panel === 'chats' && (
                   <>
