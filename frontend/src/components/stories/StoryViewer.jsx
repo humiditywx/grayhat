@@ -2,6 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Avatar from '../common/Avatar.jsx'
 import { deleteStory, replyStory, viewStory, getStoryViews } from '../../api.js'
 import { useApp } from '../../context/AppContext.jsx'
+import { Button } from '@/components/ui/button.jsx'
+import { Input } from '@/components/ui/input.jsx'
+import { Eye, Send, Trash2, X } from 'lucide-react'
 
 const STORY_DURATION = 5000
 
@@ -163,13 +166,13 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
           <div className="story-header-time">{fmtAgo(story.created_at)}</div>
         </div>
         {isOwn && (
-          <button className="story-close-btn" onClick={doDelete} title="Delete story">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-            </svg>
-          </button>
+          <Button type="button" variant="ghost" className="story-close-btn" onClick={doDelete} title="Delete story">
+            <Trash2 size={16} />
+          </Button>
         )}
-        <button className="story-close-btn" onClick={triggerClose}>✕</button>
+        <Button type="button" variant="ghost" className="story-close-btn" onClick={triggerClose}>
+          <X />
+        </Button>
       </div>
 
       {/* Media */}
@@ -201,25 +204,24 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
 
       {/* Eye icon — own story only */}
       {isOwn && (
-        <button
-          className="story-view-count-btn"
+        <Button
+          type="button"
+          variant="ghost"
+          className="story-view-count-btn h-auto"
           onClick={() => setViewersOpen(true)}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
+          <Eye size={22} />
           <span className="story-view-count-label">
             {viewers === null ? '…' : viewers.length}
           </span>
-        </button>
+        </Button>
       )}
 
       {/* Reply form — other users' stories only */}
       {!isOwn && (
         <div className="story-reply-form">
-          <input
+          <Input
             className="story-reply-input"
             placeholder={`Reply to ${group.username}…`}
             value={reply}
@@ -229,11 +231,9 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
             onFocus={() => { pausedRef.current = true }}
             onBlur={() => { if (!reply) pausedRef.current = false }}
           />
-          <button className="btn-icon-primary" onClick={doReply} onPointerDown={(e) => e.stopPropagation()}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-          </button>
+          <Button type="button" className="btn-icon-primary" onClick={doReply} onPointerDown={(e) => e.stopPropagation()}>
+            <Send />
+          </Button>
         </div>
       )}
 
@@ -244,7 +244,9 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
             <div className="story-viewers-handle" />
             <div className="story-viewers-header">
               <span>Viewers · {viewers?.length ?? 0}</span>
-              <button className="story-close-btn" onClick={() => setViewersOpen(false)}>✕</button>
+              <Button type="button" variant="ghost" className="story-close-btn" onClick={() => setViewersOpen(false)}>
+                <X />
+              </Button>
             </div>
             <div className="story-viewers-list">
               {viewers === null && (

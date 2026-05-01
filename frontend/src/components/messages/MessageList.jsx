@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import MessageBubble from './MessageBubble.jsx'
 import { getMessages, markRead } from '../../api.js'
 import { useSocket } from '../../context/SocketContext.jsx'
+import { Button } from '@/components/ui/button.jsx'
 
 function fmtDate(iso) {
   const d = new Date(iso)
@@ -134,9 +135,9 @@ export default function MessageList({ conv, me, onReply }) {
   return (
     <div className="message-list" ref={listRef}>
       {hasMore && (
-        <button className="load-more-btn" onClick={loadMore} disabled={loadingMore}>
+        <Button type="button" variant="outline" size="sm" className="load-more-btn" onClick={loadMore} disabled={loadingMore}>
           {loadingMore ? 'Loading…' : 'Load earlier messages'}
-        </button>
+        </Button>
       )}
 
       {messages.length === 0 && (

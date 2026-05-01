@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSocket } from '../../context/SocketContext.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import Avatar from './Avatar.jsx'
+import { Button } from '@/components/ui/button.jsx'
+import { X } from 'lucide-react'
 
 export default function MessageNotificationBanner() {
   const { on } = useSocket()
@@ -57,16 +59,23 @@ export default function MessageNotificationBanner() {
         </div>
         <div className="msg-notif-preview">{preview}</div>
       </div>
-      <button
+      <Button
+        type="button"
+        size="sm"
         className="msg-notif-reply"
         onClick={(e) => { e.stopPropagation(); handleReply() }}
       >
         Reply
-      </button>
-      <button
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
         className="msg-notif-close"
         onClick={(e) => { e.stopPropagation(); dismiss() }}
-      >✕</button>
+      >
+        <X />
+      </Button>
     </div>
   )
 }

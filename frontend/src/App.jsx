@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect } from 'react'
 import { useLocale } from './i18n/index.jsx'
 import { AppProvider, useApp } from './context/AppContext.jsx'
 import { SocketProvider } from './context/SocketContext.jsx'
@@ -7,7 +7,6 @@ import AuthPage from './components/auth/AuthPage.jsx'
 import TotpPage from './components/totp/TotpPage.jsx'
 import Sidebar from './components/layout/Sidebar.jsx'
 import ChatPane from './components/layout/ChatPane.jsx'
-import ToastContainer from './components/common/Toast.jsx'
 import IncomingCallDialog from './components/calls/IncomingCallDialog.jsx'
 import CallOverlay from './components/calls/CallOverlay.jsx'
 import UserProfilePage from './components/common/UserProfilePage.jsx'
@@ -19,7 +18,6 @@ function AppInner() {
   const { state, dispatch, toast } = useApp()
   const { t } = useLocale()
 
-  // Parse initial route action from URL
   useEffect(() => {
     const path = window.location.pathname
     const groupMatch = path.match(/^\/g\/(.+)$/)
@@ -28,7 +26,6 @@ function AppInner() {
     else if (friendMatch) dispatch({ type: 'SET_ROUTE_ACTION', action: { type: 'add-friend', payload: friendMatch[1] } })
   }, []) // eslint-disable-line
 
-  // Check auth on mount
   useEffect(() => {
     authMe()
       .then((data) => {
@@ -39,21 +36,16 @@ function AppInner() {
       })
   }, []) // eslint-disable-line
 
-  // Load bootstrap data after auth
   useEffect(() => {
     if (state.authStatus !== 'authenticated') return
     bootstrap()
-      .then((data) => {
-        dispatch({ type: 'BOOTSTRAP', data })
-      })
+      .then((data) => { dispatch({ type: 'BOOTSTRAP', data }) })
       .catch(() => {})
   }, [state.authStatus]) // eslint-disable-line
 
-  // Handle route actions after bootstrap data is loaded
   useEffect(() => {
     const action = state.routeAction
     if (!action || !state.me) return
-
     const handle = async () => {
       try {
         if (action.type === 'join-group') {
@@ -78,18 +70,15 @@ function AppInner() {
       dispatch({ type: 'CLEAR_ROUTE_ACTION' })
       window.history.replaceState({}, '', '/')
     }
-
     handle()
   }, [state.routeAction, state.me]) // eslint-disable-line
 
-  // Web notifications
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {})
     }
   }, [])
 
-  // Mobile: detect screen width
   const isMobile = window.innerWidth <= 700
   const sidebarHidden = isMobile && state.mobileChatOpen
 
@@ -102,13 +91,8 @@ function AppInner() {
     )
   }
 
-  if (state.authStatus === 'unauthenticated') {
-    return <AuthPage />
-  }
-
-  if (state.requiresTotpSetup) {
-    return <TotpPage />
-  }
+  if (state.authStatus === 'unauthenticated') return <AuthPage />
+  if (state.requiresTotpSetup) return <TotpPage />
 
   return (
     <div className="app-shell" style={{ height: '100dvh', position: 'relative' }}>
@@ -126,7 +110,6 @@ function AppInner() {
 export default function App() {
   return (
     <AppProvider>
-      <ToastContainer />
       <SocketProvider>
         <CallProvider>
           <AppInner />

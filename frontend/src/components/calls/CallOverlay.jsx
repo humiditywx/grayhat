@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Avatar from '../common/Avatar.jsx'
 import { useCall } from '../../context/CallContext.jsx'
 import { useApp } from '../../context/AppContext.jsx'
+import { Button } from '@/components/ui/button.jsx'
+import { Mic, MicOff, MonitorUp, PhoneOff, Video, Volume2, VolumeX } from 'lucide-react'
 function fmt(ms) {
   const s = Math.floor(ms / 1000)
   const m = Math.floor(s / 60)
@@ -74,10 +76,10 @@ export default function CallOverlay() {
           <div className="call-preconnect-mode">{call.mode === 'video' ? '📹 Video call' : '🎙 Voice call'}</div>
         </div>
         <div className="call-controls">
-          <button className="call-ctrl-btn danger" onClick={leaveCall}>
-            <HangupIcon size={22} />
+          <Button type="button" className="call-ctrl-btn danger" onClick={leaveCall}>
+            <PhoneOff size={22} />
             <span style={{ fontSize:9 }}>Cancel</span>
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -144,16 +146,16 @@ export default function CallOverlay() {
       )}
 
       <div className="call-controls">
-        <CallCtrl active={call.muted} onClick={toggleMute} label={call.muted ? 'Unmute' : 'Mute'} icon={call.muted ? MutedIcon : MicIcon} />
+        <CallCtrl active={call.muted} onClick={toggleMute} label={call.muted ? 'Unmute' : 'Mute'} icon={call.muted ? MicOff : Mic} />
         {call.mode === 'video' && (
-          <CallCtrl active={call.camOff} onClick={toggleCamera} label={call.camOff ? 'Cam On' : 'Cam Off'} icon={CamIcon} />
+          <CallCtrl active={call.camOff} onClick={toggleCamera} label={call.camOff ? 'Cam On' : 'Cam Off'} icon={Video} />
         )}
         {call.mode === 'video' && (
           <CallCtrl
             active={call.screenSharing}
             onClick={call.screenSharing ? stopScreenShare : startScreenShare}
             label={call.screenSharing ? 'Stop Share' : 'Share'}
-            icon={ShareIcon}
+            icon={MonitorUp}
           />
         )}
         {call.mode === 'voice' && (
@@ -161,13 +163,13 @@ export default function CallOverlay() {
             active={speakerOn}
             onClick={toggleSpeaker}
             label={speakerOn ? 'Speaker' : 'Earpiece'}
-            icon={speakerOn ? SpeakerOnIcon : SpeakerOffIcon}
+            icon={speakerOn ? Volume2 : VolumeX}
           />
         )}
-        <button className="call-ctrl-btn danger" onClick={leaveCall}>
-          <HangupIcon size={22} />
+        <Button type="button" className="call-ctrl-btn danger" onClick={leaveCall}>
+          <PhoneOff size={22} />
           <span style={{ fontSize:9 }}>End</span>
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -284,56 +286,9 @@ function MiniRemoteTile({ participant, mode, remoteRefs, onClick }) {
 
 function CallCtrl({ active, onClick, label, icon: Icon }) {
   return (
-    <button className={`call-ctrl-btn${active ? ' active' : ''}`} onClick={onClick}>
+    <Button type="button" className={`call-ctrl-btn${active ? ' active' : ''}`} onClick={onClick}>
       <Icon size={22} />
       <span style={{ fontSize:9 }}>{label}</span>
-    </button>
+    </Button>
   )
 }
-
-// ── Icons ─────────────────────────────────────────────────────────────────────
-
-const MicIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-    <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-    <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-  </svg>
-)
-const MutedIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <line x1="1" y1="1" x2="23" y2="23"/>
-    <path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6"/>
-    <path d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23"/>
-    <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-  </svg>
-)
-const CamIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polygon points="23 7 16 12 23 17 23 7"/>
-    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-  </svg>
-)
-const ShareIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="2" y="3" width="20" height="14" rx="2"/>
-    <path d="M8 21h8M12 17v4"/>
-  </svg>
-)
-const SpeakerOnIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-    <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/>
-  </svg>
-)
-const SpeakerOffIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-    <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
-  </svg>
-)
-const HangupIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02L6.6 10.8z"/>
-  </svg>
-)

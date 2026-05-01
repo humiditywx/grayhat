@@ -7,6 +7,8 @@ import MessageList from '../messages/MessageList.jsx'
 import Composer from '../messages/Composer.jsx'
 import GroupInfoDialog from '../dialogs/GroupInfoDialog.jsx'
 import { leaveConv } from '../../api.js'
+import { Button } from '@/components/ui/button.jsx'
+import { ChevronLeft, Info, Phone, Video, X } from 'lucide-react'
 
 function fmtLastSeen(iso) {
   if (!iso) return 'a while ago'
@@ -78,14 +80,15 @@ export default function ChatPane() {
       {/* Header */}
       <div className="chat-header">
         {/* Back button (mobile) */}
-        <button
-          className="btn-icon chat-back-btn"
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="chat-back-btn"
           onClick={() => dispatch({ type: 'CLOSE_CHAT' })}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-        </button>
+          <ChevronLeft />
+        </Button>
 
         {isPrivate
           ? (
@@ -126,30 +129,21 @@ export default function ChatPane() {
         </div>
 
         <div className="chat-header-actions">
-          <button className="btn-icon" title="Voice call" onClick={handleVoiceCall}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
-            </svg>
-          </button>
-          <button className="btn-icon" title="Video call" onClick={handleVideoCall}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polygon points="23 7 16 12 23 17 23 7"/>
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-            </svg>
-          </button>
+          <Button type="button" variant="ghost" size="icon" title="Voice call" onClick={handleVoiceCall}>
+            <Phone />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" title="Video call" onClick={handleVideoCall}>
+            <Video />
+          </Button>
           {!isPrivate && (
-            <button className="btn-icon" title="Group info" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'groupInfoConvId', value: conv.id })}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-            </button>
+            <Button type="button" variant="ghost" size="icon" title="Group info" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'groupInfoConvId', value: conv.id })}>
+              <Info />
+            </Button>
           )}
           {isPrivate && (
-            <button className="btn-icon" title="Close chat" style={{ color:'#EF4444' }} onClick={handleLeave}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
+            <Button type="button" variant="ghost" size="icon" title="Close chat" className="text-destructive" onClick={handleLeave}>
+              <X />
+            </Button>
           )}
         </div>
       </div>

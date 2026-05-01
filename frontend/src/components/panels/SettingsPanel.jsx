@@ -4,6 +4,9 @@ import { useApp } from '../../context/AppContext.jsx'
 import { useLocale, SUPPORTED_LOCALES } from '../../i18n/index.jsx'
 import { uploadAvatar, passwordChange, authLogout, totpSetup, totpConfirm } from '../../api.js'
 import { useTheme } from '../../hooks/useTheme.js'
+import { Button } from '@/components/ui/button.jsx'
+import { Input } from '@/components/ui/input.jsx'
+import { Label } from '@/components/ui/label.jsx'
 
 export default function SettingsPanel() {
   const { state, dispatch, toast } = useApp()
@@ -56,17 +59,19 @@ export default function SettingsPanel() {
               </svg>
             </div>
           </div>
-          <input ref={avatarRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={pickAvatar} />
+          <input ref={avatarRef} type="file" accept="image/*" className="hidden" onChange={pickAvatar} />
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', color: 'var(--text)' }}>{me?.username}</div>
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', fontFamily: 'monospace', marginTop: 2 }}>{me?.id}</div>
-            <button
-              style={{ marginTop: 4 }}
-              className="btn btn-ghost btn-sm"
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-1"
               onClick={() => navigator.clipboard.writeText(me?.id || '').then(() => toast('UUID copied!', 'success'))}
             >
               {t('copyUUID')}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -102,24 +107,15 @@ export default function SettingsPanel() {
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
               {SUPPORTED_LOCALES.map((l) => (
-                <button
+                <Button
                   key={l.code}
+                  type="button"
+                  variant={locale === l.code ? 'default' : 'outline'}
+                  size="xs"
                   onClick={() => setLocale(l.code)}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: 9999,
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 600,
-                    border: '1.5px solid',
-                    borderColor: locale === l.code ? 'var(--primary)' : 'var(--border)',
-                    background: locale === l.code ? 'var(--primary)' : 'transparent',
-                    color: locale === l.code ? '#fff' : 'var(--text-2)',
-                    cursor: 'pointer',
-                    transition: 'all 120ms',
-                  }}
                 >
                   {l.label}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -165,9 +161,9 @@ export default function SettingsPanel() {
         </div>
 
         <div className="settings-section" style={{ paddingBottom: 24 }}>
-          <button className="btn btn-danger" style={{ width: '100%', marginTop: 12 }} onClick={logout}>
+          <Button type="button" variant="destructive" className="mt-3 w-full" onClick={logout}>
             {t('signOut')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -195,16 +191,16 @@ function ChangePasswordForm({ toast, dispatch, t }) {
   }
 
   return (
-    <form onSubmit={handle} style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 0 12px' }}>
+    <form onSubmit={handle} className="flex flex-col gap-2.5 py-3">
       {[[t('currentPassword'), 'current_password'], [t('newPassword'), 'new_password'], [t('confirmNewPassword'), 'confirm']].map(([label, key]) => (
-        <div className="field" key={key}>
-          <label className="field-label">{label}</label>
-          <input className="field-input" type="password" value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+        <div className="flex flex-col gap-1.5" key={key}>
+          <Label>{label}</Label>
+          <Input type="password" value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
         </div>
       ))}
-      <button className="btn btn-primary btn-sm" disabled={busy}>
+      <Button type="submit" size="sm" disabled={busy}>
         {busy ? t('saving') : t('updatePassword')}
-      </button>
+      </Button>
     </form>
   )
 }
@@ -235,9 +231,9 @@ function TotpSection({ toast, t }) {
   if (!data) {
     return (
       <div style={{ padding: '8px 0 12px' }}>
-        <button className="btn btn-primary btn-sm" onClick={setup} disabled={busy}>
+        <Button type="button" size="sm" onClick={setup} disabled={busy}>
           {busy ? t('loadingDots') : t('setupTwoFa')}
-        </button>
+        </Button>
       </div>
     )
   }
@@ -245,13 +241,13 @@ function TotpSection({ toast, t }) {
   return (
     <div style={{ padding: '8px 0 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <img src={data.qr_code} alt="QR" style={{ width: 160, height: 160, borderRadius: 12 }} />
-      <div className="field">
-        <label className="field-label">{t('confirmCode')}</label>
-        <input className="field-input" type="text" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
+      <div className="flex flex-col gap-1.5">
+        <Label>{t('confirmCode')}</Label>
+        <Input type="text" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
       </div>
-      <button className="btn btn-primary btn-sm" onClick={confirm} disabled={busy || code.length !== 6}>
+      <Button type="button" size="sm" onClick={confirm} disabled={busy || code.length !== 6}>
         {busy ? t('verifying') : t('enableTwoFa')}
-      </button>
+      </Button>
     </div>
   )
 }

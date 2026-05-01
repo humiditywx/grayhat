@@ -2,6 +2,8 @@ import { useState, useRef, useCallback } from 'react'
 import { sendMessage, sendAttachment } from '../../api.js'
 import { useSocket } from '../../context/SocketContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
+import { Button } from '@/components/ui/button.jsx'
+import { Mic, Paperclip, Send, Upload, X } from 'lucide-react'
 
 export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
   const [text, setText] = useState('')
@@ -123,27 +125,27 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
             <span className="reply-preview-name">{replyTo.sender?.username}</span>
             <span className="reply-preview-text">{(replyPreview || '').slice(0, 80)}</span>
           </div>
-          <button className="reply-preview-cancel" onClick={onCancelReply}>✕</button>
+          <Button type="button" variant="ghost" size="icon-xs" onClick={onCancelReply}>
+            <X />
+          </Button>
         </div>
       )}
 
       {file && (
         <div className="file-preview-bar">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
+          <Upload size={14} />
           <span className="file-preview-name">{file.name}</span>
-          <button onClick={clearFile} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--primary)', padding:'2px' }}>✕</button>
+          <Button type="button" variant="ghost" size="icon-xs" onClick={clearFile}>
+            <X />
+          </Button>
         </div>
       )}
 
       <div className="composer-row">
-        <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={(e) => setFile(e.target.files[0] || null)} />
-        <button className="btn-icon" type="button" title="Attach file" onClick={() => fileInputRef.current?.click()}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
-          </svg>
-        </button>
+        <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => setFile(e.target.files[0] || null)} />
+        <Button type="button" variant="ghost" size="icon" title="Attach file" onClick={() => fileInputRef.current?.click()}>
+          <Paperclip />
+        </Button>
 
         <div className="composer-textarea-wrap">
           <textarea
@@ -155,28 +157,20 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
             onKeyDown={handleKey}
             rows={1}
           />
-          <button
+          <Button
             className={`voice-rec-btn${recording ? ' recording' : ''}`}
             type="button"
             onPointerDown={startRecording}
             onPointerUp={recording ? stopRecording : undefined}
             title={recording ? t('releaseToSend') : t('holdToRecord')}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-              <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/>
-              <line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-          </button>
+            <Mic />
+          </Button>
         </div>
 
-        <button className="send-btn" type="button" onClick={send} disabled={busy || (!text.trim() && !file)}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="22" y1="2" x2="11" y2="13"/>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-          </svg>
-        </button>
+        <Button className="send-btn" type="button" onClick={send} disabled={busy || (!text.trim() && !file)}>
+          <Send />
+        </Button>
       </div>
     </div>
   )

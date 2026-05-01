@@ -1,4 +1,5 @@
-import { createContext, useContext, useReducer, useCallback, useRef } from 'react'
+import { createContext, useContext, useReducer, useCallback } from 'react'
+import { toast as sonnerToast } from 'sonner'
 
 const Ctx = createContext(null)
 
@@ -32,9 +33,6 @@ const initState = {
 
   // Full-screen user profile view
   profileViewUserId: null,
-
-  // Toasts
-  toasts: [],
 
   // Route
   routeAction: null, // { type, payload }
@@ -186,12 +184,6 @@ function reducer(state, action) {
     case 'CLOSE_DIALOG':
       return { ...state, [action.key]: false }
 
-    case 'ADD_TOAST':
-      return { ...state, toasts: [...state.toasts, action.toast] }
-
-    case 'REMOVE_TOAST':
-      return { ...state, toasts: state.toasts.filter((t) => t.id !== action.id) }
-
     case 'ADD_INCOMING_REQUEST': {
       const exists = state.friendRequests.incoming.some((r) => r.id === action.request.id)
       if (exists) return state
@@ -229,15 +221,11 @@ function reducer(state, action) {
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initState)
-  const toastTimers = useRef({})
 
-  const toast = useCallback((message, kind = 'info', duration = 3500) => {
-    const id = `${Date.now()}-${Math.random()}`
-    dispatch({ type: 'ADD_TOAST', toast: { id, message, kind } })
-    toastTimers.current[id] = setTimeout(() => {
-      dispatch({ type: 'REMOVE_TOAST', id })
-      delete toastTimers.current[id]
-    }, duration)
+  const toast = useCallback((message, kind = 'info') => {
+    if (kind === 'success') sonnerToast.success(message)
+    else if (kind === 'error') sonnerToast.error(message)
+    else sonnerToast(message)
   }, [])
 
   return (

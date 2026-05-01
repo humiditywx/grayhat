@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Avatar from '../common/Avatar.jsx'
 import { editMessage, deleteMessage, reactMessage } from '../../api.js'
+import { Button } from '@/components/ui/button.jsx'
+import { Textarea } from '@/components/ui/textarea.jsx'
+import { Edit3, FileText, Heart, Pause, Play, Trash2 } from 'lucide-react'
 
 function fmtTime(iso) {
   if (!iso) return ''
@@ -42,11 +45,9 @@ function VoicePlayer({ url, isMine }) {
 
   return (
     <div className="voice-player">
-      <button className="vp-play-btn" onClick={toggle} type="button">
-        {playing
-          ? <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
-          : <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>}
-      </button>
+      <Button className="vp-play-btn" onClick={toggle} type="button">
+        {playing ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
+      </Button>
       <div className="vp-bars">
         {Array.from({ length: BARS }).map((_, i) => (
           <div key={i} className={`vp-bar${i / BARS <= progress ? ' played' : ''}`} style={{ height: `${30 + Math.sin(i * 0.7) * 16}%` }} />
@@ -76,10 +77,7 @@ function AttachmentView({ att, isMine }) {
   }
   return (
     <a className="msg-file" href={att.url} download={att.name} target="_blank" rel="noreferrer">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/>
-        <polyline points="14,2 14,8 20,8"/>
-      </svg>
+      <FileText size={24} />
       <div className="msg-file-info">
         <div className="msg-file-name">{att.name}</div>
         <div className="msg-file-size">{fmtSize(att.size_bytes)}</div>
@@ -207,8 +205,7 @@ export default function MessageBubble({ msg, isMine, isGroup, onUpdated, onDelet
                       editing
                         ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <textarea
-                              className="field-input"
+                            <Textarea
                               value={editVal}
                               onChange={(e) => setEditVal(e.target.value)}
                               rows={2}
@@ -216,8 +213,8 @@ export default function MessageBubble({ msg, isMine, isGroup, onUpdated, onDelet
                               autoFocus
                             />
                             <div style={{ display: 'flex', gap: 6 }}>
-                              <button className="btn btn-primary btn-sm" onClick={saveEdit} disabled={busy}>Save</button>
-                              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+                              <Button type="button" size="sm" onClick={saveEdit} disabled={busy}>Save</Button>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>Cancel</Button>
                             </div>
                           </div>
                         )
@@ -236,7 +233,9 @@ export default function MessageBubble({ msg, isMine, isGroup, onUpdated, onDelet
         {/* Reactions */}
         {hearts.length > 0 && (
           <div className="msg-reactions">
-            <button className="msg-reaction-btn" onClick={doReact}>❤️ {hearts.length}</button>
+            <Button type="button" variant="ghost" size="xs" className="msg-reaction-btn" onClick={doReact}>
+              <Heart fill="currentColor" /> {hearts.length}
+            </Button>
           </div>
         )}
 
@@ -251,13 +250,19 @@ export default function MessageBubble({ msg, isMine, isGroup, onUpdated, onDelet
         {!isDeleted && !editing && (
           <div className="msg-action-row">
             {hearts.length === 0 && (
-              <button className="msg-action-btn" onClick={doReact}>❤️</button>
+              <Button type="button" variant="ghost" size="xs" className="msg-action-btn" onClick={doReact}>
+                <Heart />
+              </Button>
             )}
             {isMine && msg.message_type === 'text' && (
-              <button className="msg-action-btn" onClick={startEdit}>Edit</button>
+              <Button type="button" variant="ghost" size="xs" className="msg-action-btn" onClick={startEdit}>
+                <Edit3 /> Edit
+              </Button>
             )}
             {isMine && (
-              <button className="msg-action-btn danger" onClick={doDelete}>Delete</button>
+              <Button type="button" variant="ghost" size="xs" className="msg-action-btn danger" onClick={doDelete}>
+                <Trash2 /> Delete
+              </Button>
             )}
           </div>
         )}

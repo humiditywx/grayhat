@@ -9,6 +9,9 @@ import ProfilePanel from '../panels/ProfilePanel.jsx'
 import AddFriendDialog from '../dialogs/AddFriendDialog.jsx'
 import CreateGroupDialog from '../dialogs/CreateGroupDialog.jsx'
 import { sendFriendRequest, joinGroup, postStory, sendAttachment } from '../../api.js'
+import { Button } from '@/components/ui/button.jsx'
+import { Input } from '@/components/ui/input.jsx'
+import { ArrowLeft, ChevronLeft, MessageCircle, Search, UserRoundPlus, UsersRound, X } from 'lucide-react'
 
 function fmtTime(iso) {
   if (!iso) return ''
@@ -125,7 +128,9 @@ function CameraActionModal({ file, onClose, dispatch, toast, conversations }) {
           <span style={{ fontWeight: 700, fontSize: 'var(--text-base)' }}>
             {view === 'send-picker' ? 'Send to…' : 'Use photo'}
           </span>
-          <button className="btn-icon" onClick={onClose}>✕</button>
+          <Button type="button" variant="ghost" size="icon" onClick={onClose}>
+            <X />
+          </Button>
         </div>
 
         {view === 'options' && (
@@ -176,16 +181,16 @@ function CameraActionModal({ file, onClose, dispatch, toast, conversations }) {
 
         {view === 'send-picker' && (
           <>
-            <button
-              className="btn-ghost btn-sm"
-              style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mb-2"
               onClick={() => setView('options')}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="15 18 9 12 15 6"/>
-              </svg>
+              <ArrowLeft />
               Back
-            </button>
+            </Button>
             <div className="send-picker">
               {conversations.length === 0 && (
                 <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '20px 0', fontSize: 'var(--text-sm)' }}>
@@ -256,18 +261,18 @@ export default function Sidebar({ mobileHidden }) {
         <div className="sidebar-header">
           {panel === 'chats' && chatSubView === 'inbox' ? (
             <>
-              <button className="btn-icon" onClick={() => setChatSubView('list')} title="Back to chats">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="15 18 9 12 15 6"/>
-                </svg>
-              </button>
+              <Button type="button" variant="ghost" size="icon" onClick={() => setChatSubView('list')} title="Back to chats">
+                <ChevronLeft />
+              </Button>
               <span className="sidebar-logo" style={{ flex: 1 }}>{t('inboxTitle')}</span>
-              <button
-                className="btn btn-primary btn-sm"
+              <Button
+                type="button"
+                size="sm"
                 onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}
               >
+                <UserRoundPlus />
                 {t('addFriend')}
-              </button>
+              </Button>
             </>
           ) : (
             <>
@@ -292,21 +297,12 @@ export default function Sidebar({ mobileHidden }) {
               <div style={{ display: 'flex', gap: 4 }}>
                 {panel === 'chats' && (
                   <>
-                    <button className="btn-icon" title="New direct message" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-                      </svg>
-                    </button>
-                    <button className="btn-icon" title="New group" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'createGroupOpen' })}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-                        <circle cx="9" cy="7" r="4"/>
-                        <path d="M23 21v-2a4 4 0 00-3-3.87"/>
-                        <path d="M16 3.13a4 4 0 010 7.75"/>
-                        <line x1="19" y1="8" x2="19" y2="14"/>
-                        <line x1="22" y1="11" x2="16" y2="11"/>
-                      </svg>
-                    </button>
+                    <Button type="button" variant="ghost" size="icon" title="New direct message" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}>
+                      <MessageCircle />
+                    </Button>
+                    <Button type="button" variant="ghost" size="icon" title="New group" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'createGroupOpen' })}>
+                      <UsersRound />
+                    </Button>
                   </>
                 )}
               </div>
@@ -322,10 +318,8 @@ export default function Sidebar({ mobileHidden }) {
             {/* Search bar */}
             <div className="chat-search-wrap">
               <div className="chat-search-inner">
-                <svg className="chat-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
-                <input
+                <Search className="chat-search-icon" size={15} />
+                <Input
                   className="chat-search"
                   type="text"
                   placeholder={t('searchChats')}
@@ -333,11 +327,9 @@ export default function Sidebar({ mobileHidden }) {
                   onChange={(e) => setSearch(e.target.value)}
                 />
                 {search && (
-                  <button className="chat-search-clear" onClick={() => setSearch('')}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
+                  <Button type="button" variant="ghost" size="icon-xs" className="shrink-0" onClick={() => setSearch('')}>
+                    <X />
+                  </Button>
                 )}
               </div>
             </div>
@@ -460,7 +452,7 @@ export default function Sidebar({ mobileHidden }) {
             type="file"
             accept="image/*,video/*"
             capture="environment"
-            style={{ display: 'none' }}
+            className="hidden"
             onChange={handleCameraCapture}
           />
 
