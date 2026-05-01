@@ -1,9 +1,5 @@
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog.jsx'
-import { Button } from '@/components/ui/button.jsx'
-import { Input } from '@/components/ui/input.jsx'
-import { Label } from '@/components/ui/label.jsx'
-import { Checkbox } from '@/components/ui/checkbox.jsx'
+import Modal from '../common/Modal.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { createGroup } from '../../api.js'
 
@@ -30,35 +26,24 @@ export default function CreateGroupDialog({ onClose }) {
   }
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="max-w-[480px]">
-        <DialogHeader>
-          <DialogTitle>Create Group</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handle} className="flex flex-col gap-3.5">
-          <div className="flex flex-col gap-1.5">
-            <Label>Group name *</Label>
-            <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="My group" autoFocus />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Description (optional)</Label>
-            <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What's this group about?" />
-          </div>
-          <div className="flex items-center gap-2.5">
-            <Checkbox
-              id="is_public"
-              checked={form.is_public}
-              onCheckedChange={(checked) => setForm({ ...form, is_public: !!checked })}
-            />
-            <label htmlFor="is_public" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)', cursor: 'pointer' }}>
-              Public group (joinable via invite link)
-            </label>
-          </div>
-          <Button type="submit" disabled={busy || !form.title.trim()}>
-            {busy ? 'Creating…' : 'Create Group'}
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <Modal title="Create Group" onClose={onClose}>
+      <form onSubmit={handle} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="field">
+          <label className="field-label">Group name *</label>
+          <input className="field-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="My group" autoFocus />
+        </div>
+        <div className="field">
+          <label className="field-label">Description (optional)</label>
+          <input className="field-input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What's this group about?" />
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>
+          <input type="checkbox" checked={form.is_public} onChange={(e) => setForm({ ...form, is_public: e.target.checked })} />
+          Public group (joinable via invite link)
+        </label>
+        <button className="btn btn-primary" disabled={busy || !form.title.trim()}>
+          {busy ? 'Creating…' : 'Create Group'}
+        </button>
+      </form>
+    </Modal>
   )
 }

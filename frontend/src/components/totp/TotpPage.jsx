@@ -2,9 +2,6 @@ import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
 import { totpSetup, totpConfirm } from '../../api.js'
-import { Button } from '@/components/ui/button.jsx'
-import { Input } from '@/components/ui/input.jsx'
-import { Label } from '@/components/ui/label.jsx'
 
 export default function TotpPage() {
   const { dispatch, toast } = useApp()
@@ -75,27 +72,27 @@ export default function TotpPage() {
         </div>
 
         {step === 'setup' && (
-          <Button
-            type="button"
-            variant="outline"
-            className="mb-3 w-full"
+          <button
+            className="btn btn-outline"
+            style={{ width: '100%', marginBottom: 12 }}
             onClick={() => { navigator.clipboard.writeText(recoveryCodes.join('\n')).catch(() => {}); setSavedCodes(true) }}
           >
             {savedCodes ? t('copied') : t('copyRecoveryCodes')}
-          </Button>
+          </button>
         )}
 
         {step === 'setup' && (
-          <Button type="button" className="mb-2 w-full" onClick={() => setStep('confirm')}>
+          <button className="btn btn-primary" style={{ width: '100%', marginBottom: 8 }} onClick={() => setStep('confirm')}>
             {t('verify')}
-          </Button>
+          </button>
         )}
 
         {step === 'confirm' && (
-          <form onSubmit={confirm} className="mt-2 flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label>{t('enterCode')}</Label>
-              <Input
+          <form onSubmit={confirm} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+            <div className="field">
+              <label className="field-label">{t('enterCode')}</label>
+              <input
+                className="field-input"
                 type="text"
                 inputMode="numeric"
                 maxLength={6}
@@ -105,15 +102,15 @@ export default function TotpPage() {
                 autoFocus
               />
             </div>
-            <Button type="submit" disabled={busy || code.length !== 6}>
+            <button className="btn btn-primary" disabled={busy || code.length !== 6}>
               {busy ? t('verifying') : t('enableTwoFa')}
-            </Button>
+            </button>
           </form>
         )}
 
-        <Button type="button" variant="ghost" className="mt-2 w-full" onClick={skip}>
+        <button className="btn btn-ghost" style={{ width: '100%', marginTop: 8 }} onClick={skip}>
           {t('skip')}
-        </Button>
+        </button>
       </div>
     </div>
   )

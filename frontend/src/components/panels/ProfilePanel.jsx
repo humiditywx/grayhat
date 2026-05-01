@@ -5,11 +5,6 @@ import { uploadAvatar, removeFriend, openPrivate, updateProfile, changeUsername 
 import SettingsPanel from './SettingsPanel.jsx'
 import AddFriendDialog from '../dialogs/AddFriendDialog.jsx'
 import StoryViewer from '../stories/StoryViewer.jsx'
-import { Button } from '@/components/ui/button.jsx'
-import { Input } from '@/components/ui/input.jsx'
-import { Label } from '@/components/ui/label.jsx'
-import { Textarea } from '@/components/ui/textarea.jsx'
-import { ChevronLeft, Copy, Edit3, MessageCircle, Plus, Settings, Trash2 } from 'lucide-react'
 
 function fmtLastSeen(iso) {
   if (!iso) return 'Never'
@@ -42,9 +37,11 @@ export default function ProfilePanel() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
         <div style={{ position: 'absolute', top: 16, left: 8, zIndex: 10 }}>
-          <Button type="button" variant="ghost" size="icon" onClick={() => setView('profile')} title="Back">
-            <ChevronLeft />
-          </Button>
+          <button className="btn-icon" onClick={() => setView('profile')} title="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
         </div>
         <SettingsPanel />
       </div>
@@ -68,15 +65,16 @@ export default function ProfilePanel() {
       {/* Header */}
       <div className="panel-header">
         <span className="panel-title">Profile</span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
+        <button
+          className="btn-icon"
           title="Settings"
           onClick={() => setView('settings')}
         >
-          <Settings />
-        </Button>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+          </svg>
+        </button>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -109,26 +107,28 @@ export default function ProfilePanel() {
 
         {/* Quick action buttons */}
         <div style={{ padding: '4px 16px 8px', display: 'flex', gap: 8 }}>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="flex-1"
+          <button
+            className="btn btn-outline btn-sm"
+            style={{ flex: 1 }}
             onClick={() => setView('edit')}
           >
-            <Edit3 />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
             Edit Profile
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="flex-1"
+          </button>
+          <button
+            className="btn btn-outline btn-sm"
+            style={{ flex: 1 }}
             onClick={() => navigator.clipboard.writeText(me?.id || '').then(() => toast('UUID copied!', 'success'))}
           >
-            <Copy />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+            </svg>
             Copy UUID
-          </Button>
+          </button>
         </div>
 
         {/* Friends card */}
@@ -208,9 +208,11 @@ function QRView({ onBack, me }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div className="panel-header">
-        <Button type="button" variant="ghost" size="icon" onClick={onBack} title="Back">
-          <ChevronLeft />
-        </Button>
+        <button className="btn-icon" onClick={onBack} title="Back">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
         <span className="panel-title">My QR Code</span>
       </div>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
@@ -294,9 +296,11 @@ function EditProfileView({ onBack }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div className="panel-header">
-        <Button type="button" variant="ghost" size="icon" onClick={onBack} title="Back">
-          <ChevronLeft />
-        </Button>
+        <button className="btn-icon" onClick={onBack} title="Back">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
         <span className="panel-title">Edit Profile</span>
       </div>
 
@@ -318,14 +322,15 @@ function EditProfileView({ onBack }) {
               </svg>
             </div>
           </div>
-          <input ref={avatarRef} type="file" accept="image/*" className="hidden" onChange={pickAvatar} />
+          <input ref={avatarRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={pickAvatar} />
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>Tap to change photo</span>
         </div>
 
         {/* Username */}
-        <div className="flex flex-col gap-1.5" style={{ marginBottom: 16 }}>
-          <Label>Username</Label>
-          <Input
+        <div className="field" style={{ marginBottom: 16 }}>
+          <label className="field-label">Username</label>
+          <input
+            className="field-input"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="username"
@@ -339,21 +344,21 @@ function EditProfileView({ onBack }) {
               </span>
             )}
           </div>
-          <Button
-            type="button"
-            size="sm"
-            className="mt-1 self-start"
+          <button
+            className="btn btn-primary btn-sm"
             onClick={saveUsername}
             disabled={busy || !username.trim() || username === me?.username}
+            style={{ alignSelf: 'flex-start', marginTop: 4 }}
           >
             {busy ? 'Saving…' : 'Update Username'}
-          </Button>
+          </button>
         </div>
 
         {/* Bio */}
-        <div className="flex flex-col gap-1.5" style={{ marginBottom: 16 }}>
-          <Label>Bio</Label>
-          <Textarea
+        <div className="field" style={{ marginBottom: 16 }}>
+          <label className="field-label">Bio</label>
+          <textarea
+            className="field-input"
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             placeholder="Tell people about yourself…"
@@ -362,15 +367,14 @@ function EditProfileView({ onBack }) {
             style={{ resize: 'vertical' }}
           />
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', textAlign: 'right' }}>{bio.length}/300</div>
-          <Button
-            type="button"
-            size="sm"
-            className="mt-1 self-start"
+          <button
+            className="btn btn-primary btn-sm"
             onClick={saveBio}
             disabled={busy || bio === (me?.bio || '')}
+            style={{ alignSelf: 'flex-start', marginTop: 4 }}
           >
             {busy ? 'Saving…' : 'Save Bio'}
-          </Button>
+          </button>
         </div>
       </div>
     </div>
@@ -408,18 +412,18 @@ function FriendsView({ onBack }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div className="panel-header">
-        <Button type="button" variant="ghost" size="icon" onClick={onBack} title="Back">
-          <ChevronLeft />
-        </Button>
+        <button className="btn-icon" onClick={onBack} title="Back">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
         <span className="panel-title">Friends</span>
-        <Button
-          type="button"
-          size="sm"
+        <button
+          className="btn btn-primary btn-sm"
           onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}
         >
-          <Plus />
-          Add
-        </Button>
+          + Add
+        </button>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -441,12 +445,16 @@ function FriendsView({ onBack }) {
               </div>
             </div>
             <div className="friend-actions">
-              <Button type="button" variant="ghost" size="icon" title="Message" onClick={() => openChat(f)}>
-                <MessageCircle />
-              </Button>
-              <Button type="button" variant="ghost" size="icon" title="Remove" onClick={() => remove(f)} disabled={busy === f.id} className="text-destructive">
-                <Trash2 />
-              </Button>
+              <button className="btn-icon" title="Message" onClick={() => openChat(f)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                </svg>
+              </button>
+              <button className="btn-icon" title="Remove" onClick={() => remove(f)} disabled={busy === f.id} style={{ color: '#EF4444' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+              </button>
             </div>
           </div>
         ))}

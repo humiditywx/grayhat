@@ -3,8 +3,6 @@ import { useSocket } from '../../context/SocketContext.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import Avatar from './Avatar.jsx'
 import { acceptFriendRequest, declineFriendRequest } from '../../api.js'
-import { Button } from '@/components/ui/button.jsx'
-import { Check, X } from 'lucide-react'
 
 export default function FriendRequestBanner() {
   const { on } = useSocket()
@@ -73,26 +71,26 @@ export default function FriendRequestBanner() {
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-sm"
-          className="text-destructive"
+        <button
+          className="req-action-decline"
           onClick={handleDecline}
           disabled={busy}
           title="Decline"
         >
-          <X />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+        <button
+          className="req-action-accept"
           onClick={handleAccept}
           disabled={busy}
           title="Accept"
         >
-          <Check />
-        </Button>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </button>
       </div>
     </div>
   )

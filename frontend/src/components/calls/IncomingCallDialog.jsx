@@ -1,7 +1,5 @@
 import Avatar from '../common/Avatar.jsx'
 import { useCall } from '../../context/CallContext.jsx'
-import { Button } from '@/components/ui/button.jsx'
-import { Phone, X } from 'lucide-react'
 
 export default function IncomingCallDialog() {
   const { call, joinCall, declineCall } = useCall()
@@ -35,18 +33,22 @@ export default function IncomingCallDialog() {
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginBottom: 24 }}>from {inc.callerName}</div>
 
         <div className="incoming-call-actions">
-          <Button type="button" variant="ghost" className="call-action-btn h-auto p-0 hover:bg-transparent" onClick={decline}>
+          <button className="call-action-btn" onClick={decline}>
             <div className="call-decline-btn">
-              <X size={26} />
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
             </div>
             <span>Decline</span>
-          </Button>
-          <Button type="button" variant="ghost" className="call-action-btn h-auto p-0 hover:bg-transparent" onClick={answer}>
+          </button>
+          <button className="call-action-btn" onClick={answer}>
             <div className="call-answer-btn">
-              <Phone size={26} />
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
+              </svg>
             </div>
             <span>Answer</span>
-          </Button>
+          </button>
         </div>
       </div>
     </div>

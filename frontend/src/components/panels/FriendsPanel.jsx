@@ -4,8 +4,6 @@ import { useApp } from '../../context/AppContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
 import { removeFriend, openPrivate } from '../../api.js'
 import AddFriendDialog from '../dialogs/AddFriendDialog.jsx'
-import { Button } from '@/components/ui/button.jsx'
-import { MessageCircle, Trash2, UserPlus } from 'lucide-react'
 
 function fmtLastSeen(iso, t) {
   if (!iso) return t('neverSeen')
@@ -46,14 +44,12 @@ export default function FriendsPanel() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div className="panel-header">
         <span className="panel-title">{t('friendsTitle')}</span>
-        <Button
-          type="button"
-          size="sm"
+        <button
+          className="btn btn-primary btn-sm"
           onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}
         >
-          <UserPlus />
           {t('addFriend')}
-        </Button>
+        </button>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -77,12 +73,16 @@ export default function FriendsPanel() {
               </div>
             </div>
             <div className="friend-actions">
-              <Button type="button" variant="ghost" size="icon" title={t('messagePlaceholder')} onClick={() => openChat(f)}>
-                <MessageCircle />
-              </Button>
-              <Button type="button" variant="ghost" size="icon" onClick={() => remove(f)} className="text-destructive">
-                <Trash2 />
-              </Button>
+              <button className="btn-icon" title={t('messagePlaceholder')} onClick={() => openChat(f)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                </svg>
+              </button>
+              <button className="btn-icon" onClick={() => remove(f)} style={{ color: '#EF4444' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+              </button>
             </div>
           </div>
         ))}

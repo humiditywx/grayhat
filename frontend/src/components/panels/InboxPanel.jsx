@@ -3,10 +3,6 @@ import Avatar from '../common/Avatar.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
 import { acceptFriendRequest, declineFriendRequest, cancelFriendRequest } from '../../api.js'
-import { Badge } from '@/components/ui/badge.jsx'
-import { Button } from '@/components/ui/button.jsx'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
-import { Check, UserPlus, X } from 'lucide-react'
 
 function fmtTime(iso, t) {
   if (!iso) return ''
@@ -77,30 +73,33 @@ export default function InboxPanel({ hideHeader = false }) {
       {!hideHeader && (
         <div className="panel-header">
           <span className="panel-title">{t('inboxTitle')}</span>
-          <Button
-            type="button"
-            size="sm"
+          <button
+            className="btn btn-primary btn-sm"
             onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}
           >
-            <UserPlus />
             {t('addFriend')}
-          </Button>
+          </button>
         </div>
       )}
 
-      <Tabs value={tab} onValueChange={setTab} className="min-h-0 flex-1 gap-0">
-        <TabsList className="mx-3 my-2 grid w-auto grid-cols-2">
-          <TabsTrigger value="received">
-            {t('received')}
-            {incoming.length > 0 && <Badge className="ml-1 h-4 px-1.5">{incoming.length}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="sent">
-            {t('sent')}
-            {outgoing.length > 0 && <Badge className="ml-1 h-4 px-1.5">{outgoing.length}</Badge>}
-          </TabsTrigger>
-        </TabsList>
+      <div className="inbox-tabs">
+        <button
+          className={`inbox-tab-pill${tab === 'received' ? ' active' : ''}`}
+          onClick={() => setTab('received')}
+        >
+          {t('received')} {incoming.length > 0 && <span className="inbox-tab-badge">{incoming.length}</span>}
+        </button>
+        <button
+          className={`inbox-tab-pill${tab === 'sent' ? ' active' : ''}`}
+          onClick={() => setTab('sent')}
+        >
+          {t('sent')} {outgoing.length > 0 && <span className="inbox-tab-badge">{outgoing.length}</span>}
+        </button>
+      </div>
 
-        <TabsContent value="received" className="min-h-0 flex-1 overflow-y-auto">
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {tab === 'received' && (
+          <>
             {incoming.length === 0 && (
               <div style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 'var(--text-sm)', padding: '40px 20px' }}>
                 {t('noPendingRequests')}
@@ -114,30 +113,32 @@ export default function InboxPanel({ hideHeader = false }) {
                   <div className="req-item-sub">{t('wantsFriend')} · {fmtTime(req.created_at, t)}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    className="text-destructive"
+                  <button
+                    className="req-action-decline"
                     onClick={() => handleDecline(req)}
                     disabled={busy === req.id}
                   >
-                    <X />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon-sm"
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                  <button
+                    className="req-action-accept"
                     onClick={() => handleAccept(req)}
                     disabled={busy === req.id}
                   >
-                    <Check />
-                  </Button>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </button>
                 </div>
               </div>
             ))}
-        </TabsContent>
+          </>
+        )}
 
-        <TabsContent value="sent" className="min-h-0 flex-1 overflow-y-auto">
+        {tab === 'sent' && (
+          <>
             {outgoing.length === 0 && (
               <div style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 'var(--text-sm)', padding: '40px 20px' }}>
                 {t('noSentRequests')}
@@ -150,20 +151,21 @@ export default function InboxPanel({ hideHeader = false }) {
                   <div className="req-item-name">{req.other_user.username}</div>
                   <div className="req-item-sub">{t('requestPending')} · {fmtTime(req.created_at, t)}</div>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
+                <button
+                  className="btn-icon"
                   onClick={() => handleCancel(req)}
                   disabled={busy === req.id}
-                  className="shrink-0 text-muted-foreground"
+                  style={{ color: 'var(--text-3)', flexShrink: 0 }}
                 >
-                  <X />
-                </Button>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
               </div>
             ))}
-        </TabsContent>
-      </Tabs>
+          </>
+        )}
+      </div>
 
     </div>
   )

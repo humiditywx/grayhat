@@ -2,10 +2,6 @@ import { useState } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
 import { authLogin, authRegister, passwordReset } from '../../api.js'
-import { Button } from '@/components/ui/button.jsx'
-import { Input } from '@/components/ui/input.jsx'
-import { Label } from '@/components/ui/label.jsx'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
 
 export default function AuthPage() {
   const { dispatch, toast } = useApp()
@@ -18,22 +14,17 @@ export default function AuthPage() {
         <div className="auth-logo">GrayHat</div>
         <div className="auth-tagline">{t('tagline')}</div>
 
-        <Tabs value={tab} onValueChange={setTab} className="w-full gap-4">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="login">{t('signIn')}</TabsTrigger>
-            <TabsTrigger value="register">{t('signUp')}</TabsTrigger>
-            <TabsTrigger value="reset">{t('reset')}</TabsTrigger>
-          </TabsList>
-          <TabsContent value="login">
-            <LoginForm dispatch={dispatch} toast={toast} t={t} />
-          </TabsContent>
-          <TabsContent value="register">
-            <RegisterForm dispatch={dispatch} toast={toast} t={t} />
-          </TabsContent>
-          <TabsContent value="reset">
-            <ResetForm dispatch={dispatch} toast={toast} t={t} />
-          </TabsContent>
-        </Tabs>
+        <div className="auth-tabs">
+          {['login', 'register', 'reset'].map((t2) => (
+            <button key={t2} className={`auth-tab${tab === t2 ? ' active' : ''}`} onClick={() => setTab(t2)}>
+              {t2 === 'login' ? t('signIn') : t2 === 'register' ? t('signUp') : t('reset')}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'login'    && <LoginForm    dispatch={dispatch} toast={toast} t={t} />}
+        {tab === 'register' && <RegisterForm dispatch={dispatch} toast={toast} t={t} />}
+        {tab === 'reset'    && <ResetForm    dispatch={dispatch} toast={toast} t={t} />}
       </div>
     </div>
   )
@@ -60,9 +51,9 @@ function LoginForm({ dispatch, toast, t }) {
     <form className="auth-form" onSubmit={handle}>
       <Field label={t('username')} value={form.username} onChange={(v) => setForm({ ...form, username: v })} autoComplete="username" />
       <Field label={t('password')} type="password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} autoComplete="current-password" />
-      <Button type="submit" className="w-full mt-1.5" disabled={busy || !form.username || !form.password}>
+      <button className="btn btn-primary" disabled={busy || !form.username || !form.password}>
         {busy ? t('signingIn') : t('signIn')}
-      </Button>
+      </button>
     </form>
   )
 }
@@ -90,9 +81,9 @@ function RegisterForm({ dispatch, toast, t }) {
       <Field label={t('username')} value={form.username} onChange={(v) => setForm({ ...form, username: v })} autoComplete="username" />
       <Field label={t('password')} type="password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} autoComplete="new-password" />
       <Field label={t('confirmPassword')} type="password" value={form.confirm} onChange={(v) => setForm({ ...form, confirm: v })} autoComplete="new-password" />
-      <Button type="submit" className="w-full mt-1.5" disabled={busy || !form.username || !form.password}>
+      <button className="btn btn-primary" disabled={busy || !form.username || !form.password}>
         {busy ? t('creatingAccount') : t('createAccount')}
-      </Button>
+      </button>
     </form>
   )
 }
@@ -123,18 +114,19 @@ function ResetForm({ dispatch, toast, t }) {
       <Field label={t('totpOrRecovery')} value={form.verification_code} onChange={(v) => setForm({ ...form, verification_code: v })} />
       <Field label={t('newPassword')} type="password" value={form.new_password} onChange={(v) => setForm({ ...form, new_password: v })} />
       <Field label={t('confirmNewPassword')} type="password" value={form.confirm} onChange={(v) => setForm({ ...form, confirm: v })} />
-      <Button type="submit" className="w-full mt-1.5" disabled={busy || !form.username || !form.verification_code || !form.new_password}>
+      <button className="btn btn-primary" disabled={busy || !form.username || !form.verification_code || !form.new_password}>
         {busy ? t('resetting') : t('resetPassword')}
-      </Button>
+      </button>
     </form>
   )
 }
 
 function Field({ label, type = 'text', value, onChange, autoComplete }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <Label>{label}</Label>
-      <Input
+    <div className="field">
+      <label className="field-label">{label}</label>
+      <input
+        className="field-input"
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}

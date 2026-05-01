@@ -2,8 +2,6 @@ import { useRef, useState } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import Avatar from '../common/Avatar.jsx'
 import { postStoryWithProgress } from '../../api.js'
-import { Button } from '@/components/ui/button.jsx'
-import { Plus } from 'lucide-react'
 
 // SVG circle math for the progress ring
 const RING_R = 23          // radius inside a 52×52 viewBox (center 26,26)
@@ -101,21 +99,18 @@ export default function StoryBar({ onOpenViewer }) {
 
           {/* Add-more button — only when already have stories and not uploading */}
           {myGroup?.stories?.length > 0 && !uploading && (
-            <Button
-              type="button"
+            <button
               className="story-add-btn"
               onClick={(e) => { e.stopPropagation(); storyInputRef.current?.click() }}
               title="Add story"
-            >
-              <Plus size={12} />
-            </Button>
+            >+</button>
           )}
         </div>
         <input
           ref={storyInputRef}
           type="file"
           accept="image/*,video/*"
-          className="hidden"
+          style={{ display: 'none' }}
           onChange={uploadStory}
         />
         <span className="story-item-name">{uploading ? `${uploadProgress}%` : 'My Story'}</span>

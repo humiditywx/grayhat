@@ -1,9 +1,5 @@
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog.jsx'
-import { Button } from '@/components/ui/button.jsx'
-import { Input } from '@/components/ui/input.jsx'
-import { Label } from '@/components/ui/label.jsx'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
+import Modal from '../common/Modal.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
 import { sendFriendRequest, scanQrImage } from '../../api.js'
@@ -14,36 +10,25 @@ export default function AddFriendDialog({ onClose }) {
   const [tab, setTab] = useState('qr')
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="max-w-[480px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{t('addFriendTitle')}</DialogTitle>
-        </DialogHeader>
+    <Modal title={t('addFriendTitle')} onClose={onClose}>
+      <div className="tab-pills">
+        {['qr', 'uuid', 'image'].map((v) => (
+          <button key={v} className={`tab-pill${tab === v ? ' active' : ''}`} onClick={() => setTab(v)}>
+            {v === 'qr' ? t('myQr') : v === 'uuid' ? t('addByUuid') : t('scanImage')}
+          </button>
+        ))}
+      </div>
 
-        <Tabs value={tab} onValueChange={setTab} className="gap-4">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="qr">{t('myQr')}</TabsTrigger>
-            <TabsTrigger value="uuid">{t('addByUuid')}</TabsTrigger>
-            <TabsTrigger value="image">{t('scanImage')}</TabsTrigger>
-          </TabsList>
-          <TabsContent value="qr">
-            <MyQR me={state.me} myAddLink={state.myAddLink} t={t} />
-          </TabsContent>
-          <TabsContent value="uuid">
-            <AddByUUID dispatch={dispatch} toast={toast} onClose={onClose} t={t} />
-          </TabsContent>
-          <TabsContent value="image">
-            <ScanImage dispatch={dispatch} toast={toast} onClose={onClose} t={t} />
-          </TabsContent>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
+      {tab === 'qr'    && <MyQR me={state.me} myAddLink={state.myAddLink} t={t} />}
+      {tab === 'uuid'  && <AddByUUID dispatch={dispatch} toast={toast} onClose={onClose} t={t} />}
+      {tab === 'image' && <ScanImage  dispatch={dispatch} toast={toast} onClose={onClose} t={t} />}
+    </Modal>
   )
 }
 
 function MyQR({ me, myAddLink, t }) {
   return (
-    <div className="flex flex-col items-center gap-3.5">
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
       <div className="qr-display">
         <img src="/api/users/me/qr.png" alt="My QR code" />
       </div>
@@ -89,14 +74,14 @@ function AddByUUID({ dispatch, toast, onClose, t }) {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1.5">
-        <Label>{t('uuidOrLink')}</Label>
-        <Input value={val} onChange={(e) => setVal(e.target.value)} placeholder={t('pasteUuidPlaceholder')} autoFocus />
+    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="field">
+        <label className="field-label">{t('uuidOrLink')}</label>
+        <input className="field-input" value={val} onChange={(e) => setVal(e.target.value)} placeholder={t('pasteUuidPlaceholder')} autoFocus />
       </div>
-      <Button type="submit" disabled={busy || !val.trim()}>
+      <button className="btn btn-primary" disabled={busy || !val.trim()}>
         {busy ? t('adding') : t('addFriendTitle')}
-      </Button>
+      </button>
     </form>
   )
 }
@@ -129,12 +114,12 @@ function ScanImage({ dispatch, toast, onClose, t }) {
   }
 
   return (
-    <div className="text-center p-3">
-      <label className="cursor-pointer">
-        <Button variant="outline" asChild>
-          <span>{busy ? t('scanning') : t('chooseQrImage')}</span>
-        </Button>
-        <input type="file" accept="image/*" className="hidden" onChange={pick} disabled={busy} />
+    <div style={{ textAlign: 'center', padding: 12 }}>
+      <label style={{ cursor: 'pointer' }}>
+        <div className="btn btn-outline" style={{ display: 'inline-flex' }}>
+          {busy ? t('scanning') : t('chooseQrImage')}
+        </div>
+        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={pick} disabled={busy} />
       </label>
     </div>
   )
