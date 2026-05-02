@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import MessageBubble from './MessageBubble.jsx'
 import { getMessages, markRead } from '../../api.js'
 import { useSocket } from '../../context/SocketContext.jsx'
+import { Button } from '@/components/ui/button.jsx'
 
 function fmtDate(iso) {
   const d = new Date(iso)
@@ -29,6 +30,9 @@ export default function MessageList({ conv, me, onReply }) {
   const { joinConv, leaveConv, registerMsgHandler } = useSocket()
   const convId = conv.id
   const isGroup = conv.kind === 'group'
+
+  const partnerReadAt = conv.partner_last_read_at
+  const membersReadAt = conv.members_read_at // { userId: iso }
 
   const load = useCallback(async (before = null) => {
     try {
@@ -134,9 +138,9 @@ export default function MessageList({ conv, me, onReply }) {
   return (
     <div className="message-list" ref={listRef}>
       {hasMore && (
-        <button className="load-more-btn" onClick={loadMore} disabled={loadingMore}>
+        <Button type="button" variant="outline" size="sm" className="load-more-btn" onClick={loadMore} disabled={loadingMore}>
           {loadingMore ? 'Loading…' : 'Load earlier messages'}
-        </button>
+        </Button>
       )}
 
       {messages.length === 0 && (
@@ -154,6 +158,8 @@ export default function MessageList({ conv, me, onReply }) {
             msg={msg}
             isMine={msg.sender?.id === me.id}
             isGroup={isGroup}
+            partnerReadAt={partnerReadAt}
+            membersReadAt={membersReadAt}
             onUpdated={(updated) => setMessages((prev) => prev.map((m) => m.id === updated.id ? updated : m))}
             onDeleted={(updated) => setMessages((prev) => prev.map((m) => m.id === updated.id ? updated : m))}
             onReply={onReply}

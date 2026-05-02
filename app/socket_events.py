@@ -166,15 +166,18 @@ def handle_typing_start(data):
     conversation_id = data.get('conversation_id')
     if not conversation_id:
         return
-    if _conversation_for_user(user.id, conversation_id) is None:
+    conversation = _conversation_for_user(user.id, conversation_id)
+    if conversation is None:
         return
 
-    socketio.emit(
-        'typing:start',
-        {'conversation_id': conversation_id, 'user_id': user.id, 'username': user.username},
-        to=f'conversation:{conversation_id}',
-        include_self=False,
-    )
+    payload = {'conversation_id': conversation_id, 'user_id': user.id, 'username': user.username}
+    # Broadcast to the conversation room (active chat)
+    emit('typing:start', payload, to=f'conversation:{conversation_id}', include_self=False)
+
+    # Also broadcast to individual user rooms so sidebar indicators work everywhere
+    for participant in conversation.participants:
+        if participant.user_id != user.id:
+            socketio.emit('typing:start', payload, to=f'user:{participant.user_id}')
 
 
 @socketio.on('typing:stop')
@@ -189,13 +192,18 @@ def handle_typing_stop(data):
     conversation_id = data.get('conversation_id')
     if not conversation_id:
         return
+    conversation = _conversation_for_user(user.id, conversation_id)
+    if conversation is None:
+        return
 
-    socketio.emit(
-        'typing:stop',
-        {'conversation_id': conversation_id, 'user_id': user.id},
-        to=f'conversation:{conversation_id}',
-        include_self=False,
-    )
+    payload = {'conversation_id': conversation_id, 'user_id': user.id}
+    # Broadcast to the conversation room
+    emit('typing:stop', payload, to=f'conversation:{conversation_id}', include_self=False)
+
+    # Also broadcast to individual user rooms
+    for participant in conversation.participants:
+        if participant.user_id != user.id:
+            socketio.emit('typing:stop', payload, to=f'user:{participant.user_id}')
 
 
 # ─── Calls ───────────────────────────────────────────────────────────────────

@@ -37,7 +37,7 @@ export function SocketProvider({ children }) {
 
     socket.on('user:online', ({ user_id }) => dispatch({ type: 'SET_ONLINE', userId: user_id }))
     socket.on('user:offline', ({ user_id }) => dispatch({ type: 'SET_OFFLINE', userId: user_id }))
-    socket.on('presence:snapshot', ({ online }) => dispatch({ type: 'PRESENCE_SNAPSHOT', userIds: online }))
+    socket.on('presence:snapshot', ({ online_user_ids }) => dispatch({ type: 'PRESENCE_SNAPSHOT', userIds: online_user_ids }))
 
     socket.on('typing:start', ({ conversation_id, user_id, username }) => {
       dispatch({ type: 'TYPING_START', convId: conversation_id, userId: user_id, username })
@@ -67,13 +67,16 @@ export function SocketProvider({ children }) {
       }
     })
 
-    socket.on('message:updated', (msg) => {
+    socket.on('message:updated', (data) => {
+      const msg = data?.message ?? data
       eventBus.get('message:updated')?.forEach((h) => h(msg))
     })
-    socket.on('message:deleted', (msg) => {
+    socket.on('message:deleted', (data) => {
+      const msg = data?.message ?? data
       eventBus.get('message:deleted')?.forEach((h) => h(msg))
     })
-    socket.on('message:reaction', (msg) => {
+    socket.on('message:reaction', (data) => {
+      const msg = data?.message ?? data
       eventBus.get('message:reaction')?.forEach((h) => h(msg))
     })
 

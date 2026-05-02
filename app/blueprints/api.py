@@ -90,7 +90,8 @@ def _emit_conversation_update(conversation: Conversation, event_name: str, paylo
     room = f'conversation:{conversation.id}'
     socketio.emit(event_name, payload, to=room)
     for participant in conversation.participants:
-        socketio.emit('conversation:updated', {'conversation_id': conversation.id}, to=f'user:{participant.user_id}')
+        # Include full conversation update for the sidebar/list views
+        socketio.emit('conversation:updated', serialize_conversation(conversation, participant.user_id), to=f'user:{participant.user_id}')
 
 
 @api_bp.get('/bootstrap')
@@ -899,12 +900,21 @@ def mark_conversation_read(conversation_id: str):
     mark_read(current_user.id, conversation.id)
     db.session.commit()
     read_at = next((p.last_read_at for p in conversation.participants if p.user_id == current_user.id), None)
-    # Notify other participants that this user has read
-    socketio.emit('conversation:read', {
+
+    payload = {
         'conversation_id': conversation.id,
         'user_id': current_user.id,
         'read_at': utc_iso(read_at),
-    }, to=f'conversation:{conversation.id}')
+    }
+
+    # Notify other participants that this user has read
+    socketio.emit('conversation:read', payload, to=f'conversation:{conversation.id}')
+
+    # Also broadcast to user rooms so the UI updates regardless of current active view
+    for p in conversation.participants:
+        if p.user_id != current_user.id:
+            socketio.emit('conversation:read', payload, to=f'user:{p.user_id}')
+
     return jsonify({'ok': True, 'read_at': utc_iso(read_at)})
 
 
