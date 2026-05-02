@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import MessageBubble from './MessageBubble.jsx'
 import { getMessages, markRead } from '../../api.js'
 import { useSocket } from '../../context/SocketContext.jsx'
-import { Button } from '@/components/ui/button.jsx'
+import { Button } from '@/components/ui/button'
 
 function fmtDate(iso) {
   const d = new Date(iso)
