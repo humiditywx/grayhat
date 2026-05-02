@@ -1042,7 +1042,7 @@ paths:
       tags: [messages]
       summary: Upload a file attachment
       description: >
-        Uploads a file (image, video, audio, document) as a message in the
+        Uploads a file of any type as a message in the
         conversation. The `message_type` form field can force `voice` for audio
         recordings. Emits `message:new` to all participants.
       parameters:

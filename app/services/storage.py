@@ -8,15 +8,6 @@ from flask import current_app
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
-ALLOWED_EXTENSIONS = {
-    'png', 'jpg', 'jpeg', 'gif', 'webp',
-    'mp4', 'webm', 'mov', 'mkv',
-    'mp3', 'wav', 'ogg', 'm4a', 'opus',
-    'pdf', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
-    'zip', 'rar', '7z'
-}
-
-
 PREFERRED_MIME_EXTENSIONS = {
     'image/jpeg': 'jpg',
     'audio/mp4': 'm4a',
@@ -47,13 +38,6 @@ def extension_for(filename: str, content_type: str | None = None) -> str:
     return guessed.lstrip('.').lower()
 
 
-def validate_upload(file: FileStorage) -> str:
-    ext = extension_for(file.filename or '', file.mimetype)
-    if not ext or ext not in ALLOWED_EXTENSIONS:
-        raise ValueError('This file type is not allowed.')
-    return ext
-
-
 def classify_file(content_type: str, explicit_type: str | None = None) -> str:
     if explicit_type in VOICE_MESSAGE_TYPES:
         return 'voice'
@@ -82,7 +66,7 @@ def classify_file(content_type: str, explicit_type: str | None = None) -> str:
 
 
 def save_upload(file: FileStorage) -> tuple[str, str, int, str]:
-    ext = validate_upload(file)
+    ext = extension_for(file.filename or '', file.mimetype)
     upload_root = Path(current_app.config['UPLOAD_ROOT'])
     upload_root.mkdir(parents=True, exist_ok=True)
 

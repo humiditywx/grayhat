@@ -729,10 +729,7 @@ def upload_attachment(conversation_id: str):
     explicit_type = (request.form.get('message_type') or '').strip().lower() or None
     body = (request.form.get('body') or '').strip() or None
 
-    try:
-        storage_name, storage_path, size_bytes, content_type = save_upload(file)
-    except ValueError as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 400
+    storage_name, storage_path, size_bytes, content_type = save_upload(file)
 
     kind = classify_file(content_type, explicit_type=explicit_type)
     message_type = kind

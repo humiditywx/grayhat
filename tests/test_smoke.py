@@ -160,6 +160,37 @@ class MessengerSmokeTest(unittest.TestCase):
         self.assertIsNotNone(attachment)
         self.assertTrue(attachment.storage_name.endswith('.png'))
 
+    def test_attachment_upload_accepts_unlisted_file_type(self):
+        self._register('Alice_123')
+        alice = User.query.filter_by(username_normalized='alice_123').first()
+        self._logout()
+        self._register('Bob_12345')
+
+        private = self.client.post(
+            f'/api/conversations/private/{alice.id}',
+            headers={'X-CSRF-TOKEN': self._csrf()},
+        )
+        self.assertEqual(private.status_code, 200)
+        conversation_id = private.json['conversation']['id']
+
+        upload = self.client.post(
+            f'/api/conversations/{conversation_id}/attachments',
+            data={
+                'file': (io.BytesIO(b'custom payload bytes'), 'payload.customext', 'application/vnd.pentastic.test'),
+            },
+            headers={'X-CSRF-TOKEN': self._csrf()},
+            content_type='multipart/form-data',
+        )
+
+        self.assertEqual(upload.status_code, 201, upload.json)
+        self.assertTrue(upload.json['ok'])
+        self.assertEqual(upload.json['message']['message_type'], 'file')
+        self.assertEqual(upload.json['message']['attachments'][0]['kind'], 'file')
+
+        attachment = Attachment.query.first()
+        self.assertIsNotNone(attachment)
+        self.assertTrue(attachment.storage_name.endswith('.customext'))
+
     def test_voice_note_alias_upload_is_saved_as_voice_message(self):
         self._register('Alice_123')
         alice = User.query.filter_by(username_normalized='alice_123').first()
