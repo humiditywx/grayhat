@@ -8,10 +8,10 @@ from flask import current_app
 
 def send_otp_email(to_email: str, otp_code: str, app_name: str, expires_in_mins: int = 15):
     smtp_host = current_app.config.get('SMTP_HOST')
-    smtp_port = current_app.config.get('SMTP_PORT')
+    smtp_port = int(current_app.config.get('SMTP_PORT', 465))
     smtp_user = current_app.config.get('SMTP_USER')
     smtp_pass = current_app.config.get('SMTP_PASS')
-    from_email = current_app.config.get('MAIL_FROM', smtp_user)
+    from_email = current_app.config.get('MAIL_FROM') or smtp_user
 
     if not all([smtp_host, smtp_port, smtp_user, smtp_pass]):
         current_app.logger.warning("SMTP configuration is incomplete. Email not sent.")
