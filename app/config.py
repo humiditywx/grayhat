@@ -35,7 +35,7 @@ class Config:
     MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', str(50 * 1024 * 1024)))
     UPLOAD_ROOT = Path(os.getenv('UPLOAD_ROOT', str(BASE_DIR / 'uploads')))
 
-    JWT_TOKEN_LOCATION = ['cookies']
+    JWT_TOKEN_LOCATION = ['headers', 'cookies']
     JWT_ACCESS_COOKIE_NAME = 'messenger_access'
     JWT_ACCESS_COOKIE_PATH = '/'
     JWT_COOKIE_SECURE = _as_bool(os.getenv('JWT_COOKIE_SECURE'), default=False)
