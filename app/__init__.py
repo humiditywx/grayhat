@@ -85,8 +85,6 @@ def _run_column_migrations(app: Flask) -> None:
 
             existing_cols = {c['name'] for c in inspector.get_columns('users')}
             stmts = []
-            if 'bio' not in existing_cols:
-                stmts.append("ALTER TABLE users ADD COLUMN bio TEXT")
             if 'username_changed_at' not in existing_cols:
                 stmts.append("ALTER TABLE users ADD COLUMN username_changed_at JSON NOT NULL DEFAULT '[]'")
             # Indexes added after initial deploy — CREATE INDEX IF NOT EXISTS is idempotent
