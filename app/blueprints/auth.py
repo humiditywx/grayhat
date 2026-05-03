@@ -98,15 +98,15 @@ def verify_otp():
     if user:
         if not user.username:
             # User started registration but didn't finish
-        return jsonify({
-            'ok': True,
-            'registered': False,
-            'registration_token': create_access_token(
-                identity=user.id,
-                additional_claims={'purpose': 'registration', 'tv': user.token_version or 0},
-                expires_delta=timedelta(hours=1)
-            )
-        })
+            return jsonify({
+                'ok': True,
+                'registered': False,
+                'registration_token': create_access_token(
+                    identity=user.id,
+                    additional_claims={'purpose': 'registration', 'tv': user.token_version or 0},
+                    expires_delta=timedelta(hours=1)
+                )
+            })
 
         user.last_seen_at = now
         db.session.commit()
