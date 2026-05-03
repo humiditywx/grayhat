@@ -146,11 +146,15 @@ def _register_app_hooks(app: Flask) -> None:
         if request.method in {'POST', 'PUT', 'PATCH', 'DELETE'}:
             origin = request.headers.get('Origin')
             if origin:
-                allowed = {request.host_url.rstrip('/')}
+                # Normalize and allow if it matches the current host
+                allowed = {request.host_url.rstrip('/'), f"{request.scheme}://{request.host}".rstrip('/')}
                 configured = app.config.get('PUBLIC_BASE_URL', '').rstrip('/')
                 if configured:
                     allowed.add(configured)
-                if origin.rstrip('/') not in allowed:
+
+                origin_norm = origin.rstrip('/')
+                if origin_norm not in allowed:
+                    app.logger.warning(f"CORS blocked: Origin={origin_norm}, Allowed={allowed}")
                     abort(403, description='Cross-origin request rejected.')
 
     @app.before_request

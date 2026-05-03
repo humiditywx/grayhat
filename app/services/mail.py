@@ -41,9 +41,17 @@ def send_otp_email(to_email: str, otp_code: str, app_name: str, expires_in_mins:
     msg.attach(MIMEText(html_content, 'html'))
 
     try:
-        with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
-            server.login(smtp_user, smtp_pass)
-            server.send_message(msg)
+        # Use SMTP_SSL for port 465, regular SMTP for others (like 587 with STARTTLS)
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                if smtp_port == 587:
+                    server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
     except Exception as e:
         current_app.logger.error(f"Failed to send email: {e}")
         raise RuntimeError("Failed to send OTP email.")
