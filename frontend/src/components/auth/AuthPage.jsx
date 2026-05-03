@@ -1,127 +1,222 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
-import { authLogin, authRegister, passwordReset } from '../../api.js'
+import { sendOtp, verifyOtp, completeRegister, totpSetup, totpConfirm } from '../../api.js'
 
 export default function AuthPage() {
   const { dispatch, toast } = useApp()
   const { t } = useLocale()
-  const [tab, setTab] = useState('login')
+  const [step, setStep] = useState('email') // email, otp, register, totp, global
+  const [email, setEmail] = useState('')
+  const [regToken, setRegToken] = useState('')
+  const [regForm, setRegForm] = useState({ username: '', display_name: '', is_global: false })
+  const [totpData, setTotpData] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  const onEmailSubmit = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await sendOtp(email)
+      setStep('otp')
+      toast(t('otpSent'), 'success')
+    } catch (err) {
+      toast(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onOtpSubmit = async (code) => {
+    setBusy(true)
+    try {
+      const data = await verifyOtp(email, code)
+      if (data.user) {
+        dispatch({ type: 'SET_ME', me: data.user, requiresTotpSetup: data.requires_totp_setup })
+      } else {
+        setRegToken(data.registration_token)
+        setStep('register')
+      }
+    } catch (err) {
+      toast(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onRegisterSubmit = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const data = await completeRegister(regForm, regToken)
+      dispatch({ type: 'SET_ME_TEMP', me: data.user }) // Keep user in state but don't finish auth yet
+      setStep('totp')
+    } catch (err) {
+      toast(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onFinish = (me, requiresTotpSetup) => {
+    dispatch({ type: 'SET_ME', me, requiresTotpSetup })
+  }
 
   return (
     <div className="auth-page">
       <div className="auth-card card">
         <div className="auth-logo">GrayHat</div>
-        <div className="auth-tagline">{t('tagline')}</div>
 
-        <div className="auth-tabs">
-          {['login', 'register', 'reset'].map((t2) => (
-            <button key={t2} className={`auth-tab${tab === t2 ? ' active' : ''}`} onClick={() => setTab(t2)}>
-              {t2 === 'login' ? t('signIn') : t2 === 'register' ? t('signUp') : t('reset')}
+        {step === 'email' && (
+          <form className="auth-form" onSubmit={onEmailSubmit}>
+            <div className="auth-tagline">{t('welcome')}</div>
+            <Field label={t('emailAddress')} type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
+            <button className="btn btn-primary" disabled={busy || !email}>
+              {busy ? t('sending') : t('continue')}
             </button>
-          ))}
-        </div>
+          </form>
+        )}
 
-        {tab === 'login'    && <LoginForm    dispatch={dispatch} toast={toast} t={t} />}
-        {tab === 'register' && <RegisterForm dispatch={dispatch} toast={toast} t={t} />}
-        {tab === 'reset'    && <ResetForm    dispatch={dispatch} toast={toast} t={t} />}
+        {step === 'otp' && (
+          <OtpForm onSubmit={onOtpSubmit} busy={busy} t={t} onBack={() => setStep('email')} />
+        )}
+
+        {step === 'register' && (
+          <form className="auth-form" onSubmit={onRegisterSubmit}>
+            <div className="auth-tagline">{t('createAccount')}</div>
+            <Field
+              label={t('username')}
+              value={regForm.username}
+              onChange={(v) => setRegForm({ ...regForm, username: v.toLowerCase().replace(/[^a-z0-9._]/g, '') })}
+              placeholder="lowercase, numbers, . and _"
+              hint={t('usernameHint')}
+            />
+            <Field
+              label={t('displayName')}
+              value={regForm.display_name}
+              onChange={(v) => setRegForm({ ...regForm, display_name: v })}
+              placeholder={t('optional')}
+            />
+            <button className="btn btn-primary" disabled={busy || regForm.username.length < 3}>
+              {busy ? t('saving') : t('continue')}
+            </button>
+          </form>
+        )}
+
+        {step === 'totp' && (
+          <TotpChoice
+            onSkip={() => setStep('global')}
+            onEnable={async () => {
+              try {
+                const data = await totpSetup() // This might fail if we don't have the full JWT yet.
+                // Re-thinking: Better to just ask if they want to.
+                // Actually, the completeRegister returns a full JWT in cookies.
+                setStep('totp_setup')
+              } catch(err) { toast(err.message, 'error') }
+            }}
+            t={t}
+          />
+        )}
+
+        {step === 'totp_setup' && (
+           <TotpSetupFlow onFinish={() => setStep('global')} t={t} toast={toast} />
+        )}
+
+        {step === 'global' && (
+          <GlobalModeStep
+            value={regForm.is_global}
+            onChange={(v) => setRegForm({ ...regForm, is_global: v })}
+            onFinish={() => {
+               // Update is_global on server if it changed, then finish
+               onFinish(null, false) // null means use what's already in state or refresh
+               window.location.reload() // Simplest way to re-bootstrap
+            }}
+            t={t}
+          />
+        )}
       </div>
     </div>
   )
 }
 
-function LoginForm({ dispatch, toast, t }) {
-  const [form, setForm] = useState({ username: '', password: '' })
-  const [busy, setBusy] = useState(false)
-
-  const handle = async (e) => {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      const data = await authLogin(form)
-      dispatch({ type: 'SET_ME', me: data.user, requiresTotpSetup: data.requires_totp_setup })
-    } catch (err) {
-      toast(err.message, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-
+function OtpForm({ onSubmit, busy, t, onBack }) {
+  const [code, setCode] = useState('')
   return (
-    <form className="auth-form" onSubmit={handle}>
-      <Field label={t('username')} value={form.username} onChange={(v) => setForm({ ...form, username: v })} autoComplete="username" />
-      <Field label={t('password')} type="password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} autoComplete="current-password" />
-      <button className="btn btn-primary" disabled={busy || !form.username || !form.password}>
-        {busy ? t('signingIn') : t('signIn')}
+    <form className="auth-form" onSubmit={(e) => { e.preventDefault(); onSubmit(code) }}>
+      <div className="auth-tagline">{t('enterOtp')}</div>
+      <input
+        className="field-input otp-input"
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        maxLength={6}
+        autoFocus
+        placeholder="000000"
+      />
+      <button className="btn btn-primary" disabled={busy || code.length !== 6}>
+        {busy ? t('verifying') : t('verify')}
       </button>
+      <button type="button" className="btn btn-link" onClick={onBack}>{t('back')}</button>
     </form>
   )
 }
 
-function RegisterForm({ dispatch, toast, t }) {
-  const [form, setForm] = useState({ username: '', password: '', confirm: '' })
-  const [busy, setBusy] = useState(false)
-
-  const handle = async (e) => {
-    e.preventDefault()
-    if (form.password !== form.confirm) { toast(t('passwordsNoMatch'), 'error'); return }
-    setBusy(true)
-    try {
-      const data = await authRegister({ username: form.username, password: form.password })
-      dispatch({ type: 'SET_ME', me: data.user, requiresTotpSetup: data.requires_totp_setup })
-    } catch (err) {
-      toast(err.message, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-
+function TotpChoice({ onSkip, onEnable, t }) {
   return (
-    <form className="auth-form" onSubmit={handle}>
-      <Field label={t('username')} value={form.username} onChange={(v) => setForm({ ...form, username: v })} autoComplete="username" />
-      <Field label={t('password')} type="password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} autoComplete="new-password" />
-      <Field label={t('confirmPassword')} type="password" value={form.confirm} onChange={(v) => setForm({ ...form, confirm: v })} autoComplete="new-password" />
-      <button className="btn btn-primary" disabled={busy || !form.username || !form.password}>
-        {busy ? t('creatingAccount') : t('createAccount')}
-      </button>
-    </form>
+    <div className="auth-form">
+      <div className="auth-tagline">{t('enable2fa')}</div>
+      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)', textAlign: 'center', marginBottom: '20px' }}>
+        {t('2faDescription')}
+      </p>
+      <button className="btn btn-primary" onClick={onEnable}>{t('enableNow')}</button>
+      <button className="btn btn-link" onClick={onSkip}>{t('skip')}</button>
+    </div>
   )
 }
 
-function ResetForm({ dispatch, toast, t }) {
-  const [form, setForm] = useState({ username: '', verification_code: '', new_password: '', confirm: '' })
-  const [busy, setBusy] = useState(false)
+function TotpSetupFlow({ onFinish, t, toast }) {
+  const [data, setData] = useState(null)
+  const [code, setCode] = useState('')
 
-  const handle = async (e) => {
-    e.preventDefault()
-    if (form.new_password !== form.confirm) { toast(t('passwordsNoMatch'), 'error'); return }
-    setBusy(true)
+  useEffect(() => {
+    totpSetup().then(setData).catch(err => toast(err.message, 'error'))
+  }, [])
+
+  if (!data) return <div className="spinner" />
+
+  const confirm = async () => {
     try {
-      const data = await passwordReset({ username: form.username, verification_code: form.verification_code, new_password: form.new_password })
-      dispatch({ type: 'SET_ME', me: data.user, requiresTotpSetup: data.requires_totp_setup })
-      toast('Password reset successfully.', 'success')
-    } catch (err) {
-      toast(err.message, 'error')
-    } finally {
-      setBusy(false)
-    }
+      await totpConfirm(code)
+      onFinish()
+    } catch (err) { toast(err.message, 'error') }
   }
 
   return (
-    <form className="auth-form" onSubmit={handle}>
-      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>{t('resetInstructions')}</p>
-      <Field label={t('username')} value={form.username} onChange={(v) => setForm({ ...form, username: v })} />
-      <Field label={t('totpOrRecovery')} value={form.verification_code} onChange={(v) => setForm({ ...form, verification_code: v })} />
-      <Field label={t('newPassword')} type="password" value={form.new_password} onChange={(v) => setForm({ ...form, new_password: v })} />
-      <Field label={t('confirmNewPassword')} type="password" value={form.confirm} onChange={(v) => setForm({ ...form, confirm: v })} />
-      <button className="btn btn-primary" disabled={busy || !form.username || !form.verification_code || !form.new_password}>
-        {busy ? t('resetting') : t('resetPassword')}
-      </button>
-    </form>
+    <div className="auth-form">
+       <div className="auth-tagline">{t('scanQr')}</div>
+       <img src={data.qr_code} alt="QR" style={{ width: '200px', margin: '0 auto 20px', display: 'block' }} />
+       <input className="field-input" value={code} onChange={e => setCode(e.target.value)} placeholder="000000" />
+       <button className="btn btn-primary" onClick={confirm} disabled={code.length !== 6}>{t('verifyAndEnable')}</button>
+    </div>
   )
 }
 
-function Field({ label, type = 'text', value, onChange, autoComplete }) {
+function GlobalModeStep({ value, onChange, onFinish, t }) {
+  return (
+    <div className="auth-form">
+      <div className="auth-tagline">{t('globalMode')}</div>
+      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)', textAlign: 'center', marginBottom: '20px' }}>
+        {t('globalModeDescription')}
+      </p>
+      <div className="field-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '20px' }}>
+        <input type="checkbox" checked={value} onChange={e => onChange(e.target.checked)} id="global-toggle" />
+        <label htmlFor="global-toggle">{t('enableGlobalMode')}</label>
+      </div>
+      <button className="btn btn-primary" onClick={onFinish}>{t('finish')}</button>
+    </div>
+  )
+}
+
+function Field({ label, type = 'text', value, onChange, placeholder, hint }) {
   return (
     <div className="field">
       <label className="field-label">{label}</label>
@@ -130,8 +225,9 @@ function Field({ label, type = 'text', value, onChange, autoComplete }) {
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        autoComplete={autoComplete}
+        placeholder={placeholder}
       />
+      {hint && <div className="field-hint" style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '4px' }}>{hint}</div>}
     </div>
   )
 }

@@ -96,7 +96,8 @@ export default function ProfilePanel() {
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="profile-username">{me?.username}</div>
+            <div className="profile-username">{me?.display_name || me?.username}</div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: -2 }}>@{me?.username}</div>
             {me?.bio && (
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)', marginTop: 2, lineHeight: 1.4 }}>
                 {me.bio}
@@ -241,20 +242,19 @@ function EditProfileView({ onBack }) {
   const { me } = state
   const avatarRef = useRef(null)
   const [bio, setBio] = useState(me?.bio || '')
+  const [displayName, setDisplayName] = useState(me?.display_name || '')
+  const [isGlobal, setIsGlobal] = useState(me?.is_global || false)
   const [username, setUsername] = useState(me?.username || '')
   const [busy, setBusy] = useState(false)
-  const [usernameChanges, setUsernameChanges] = useState(null) // number of changes in window
+  const [usernameChanges, setUsernameChanges] = useState(null)
 
   const pickAvatar = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     const fd = new FormData()
-    fd.append('avatar', file)
-    // Note: backend expects 'file' field for avatar
-    const fd2 = new FormData()
-    fd2.append('file', file)
+    fd.append('file', file)
     try {
-      await uploadAvatar(fd2)
+      await uploadAvatar(fd)
       dispatch({ type: 'UPDATE_MY_AVATAR' })
       toast('Avatar updated!', 'success')
     } catch (err) {
@@ -262,13 +262,17 @@ function EditProfileView({ onBack }) {
     }
   }
 
-  const saveBio = async () => {
+  const saveProfile = async () => {
     if (busy) return
     setBusy(true)
     try {
-      const data = await updateProfile({ bio })
-      dispatch({ type: 'UPDATE_ME', patch: { bio: data.user.bio } })
-      toast('Bio saved!', 'success')
+      const data = await updateProfile({ bio, display_name: displayName, is_global: isGlobal })
+      dispatch({ type: 'UPDATE_ME', patch: {
+        bio: data.user.bio,
+        display_name: data.user.display_name,
+        is_global: data.user.is_global
+      } })
+      toast('Profile saved!', 'success')
     } catch (err) {
       toast(err.message, 'error')
     } finally {
@@ -326,18 +330,36 @@ function EditProfileView({ onBack }) {
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>Tap to change photo</span>
         </div>
 
+        {/* Name */}
+        <div className="field" style={{ marginBottom: 16 }}>
+          <label className="field-label">Name</label>
+          <input
+            className="field-input"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Display Name"
+            maxLength={20}
+          />
+        </div>
+
+        {/* Global Mode */}
+        <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <input type="checkbox" id="global-toggle-edit" checked={isGlobal} onChange={e => setIsGlobal(e.target.checked)} />
+          <label htmlFor="global-toggle-edit" style={{ fontSize: 'var(--text-sm)', color: 'var(--text)' }}>Global Mode</label>
+        </div>
+
         {/* Username */}
         <div className="field" style={{ marginBottom: 16 }}>
           <label className="field-label">Username</label>
           <input
             className="field-input"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ''))}
             placeholder="username"
-            maxLength={24}
+            maxLength={31}
           />
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>
-            3–24 chars, letters/numbers/underscores.
+            3–31 chars, lowercase/numbers/dots/underscores.
             {changesLeft !== null && (
               <span style={{ marginLeft: 4, color: changesLeft === 0 ? '#EF4444' : 'var(--text-3)' }}>
                 {changesLeft} change{changesLeft !== 1 ? 's' : ''} remaining (14-day window).
@@ -347,7 +369,7 @@ function EditProfileView({ onBack }) {
           <button
             className="btn btn-primary btn-sm"
             onClick={saveUsername}
-            disabled={busy || !username.trim() || username === me?.username}
+            disabled={busy || !username.trim() || username === me?.username || username.length < 3}
             style={{ alignSelf: 'flex-start', marginTop: 4 }}
           >
             {busy ? 'Saving…' : 'Update Username'}
@@ -367,15 +389,16 @@ function EditProfileView({ onBack }) {
             style={{ resize: 'vertical' }}
           />
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', textAlign: 'right' }}>{bio.length}/300</div>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={saveBio}
-            disabled={busy || bio === (me?.bio || '')}
-            style={{ alignSelf: 'flex-start', marginTop: 4 }}
-          >
-            {busy ? 'Saving…' : 'Save Bio'}
-          </button>
         </div>
+
+        <button
+          className="btn btn-primary"
+          onClick={saveProfile}
+          disabled={busy || (bio === (me?.bio || '') && displayName === (me?.display_name || '') && isGlobal === me?.is_global)}
+          style={{ width: '100%', marginTop: 8 }}
+        >
+          {busy ? 'Saving…' : 'Save Changes'}
+        </button>
       </div>
     </div>
   )

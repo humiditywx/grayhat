@@ -74,7 +74,7 @@ def _run_column_migrations(app: Flask) -> None:
             all_known = {'users', 'friendships', 'friend_requests', 'conversations',
                          'conversation_participants', 'private_conversation_indices',
                          'messages', 'attachments', 'revoked_tokens', 'stories',
-                         'story_views', 'call_presences'}
+                         'story_views', 'call_presences', 'otps'}
             if not all_known.issubset(existing_tables):
                 db.create_all()
                 inspector = inspect(db.engine)  # refresh after table creation

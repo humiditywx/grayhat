@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import (
@@ -13,7 +13,7 @@ from flask_jwt_extended import (
 )
 
 from ..extensions import db, limiter
-from ..models import RevokedToken, User
+from ..models import RevokedToken, User, OTP
 from ..services.security import (
     build_provisioning_uri,
     check_password,
@@ -28,8 +28,10 @@ from ..services.security import (
     validate_password,
     validate_username,
     verify_totp,
+    generate_secure_otp,
 )
 from ..services.serializers import serialize_user
+from ..services.mail import send_otp_email
 
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
@@ -46,42 +48,111 @@ def _issue_auth_response(user: User, status_code: int = 200):
     return response, status_code
 
 
-@auth_bp.post('/register')
-@limiter.limit('10 per hour')
-def register():
+@auth_bp.post('/otp/send')
+@limiter.limit('3 per 15 minutes')
+def send_otp():
+    payload = request.get_json(silent=True) or {}
+    email = payload.get('email', '').strip().lower()
+    if not email:
+        return jsonify({'ok': False, 'error': 'Email is required.'}), 400
+
+    otp_code = generate_secure_otp()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+    otp_record = OTP(
+        email=email,
+        code_hash=hash_password(otp_code),
+        expires_at=expires_at
+    )
+    db.session.add(otp_record)
+    db.session.commit()
+
+    from flask import current_app
+    send_otp_email(email, otp_code, current_app.config['APP_NAME'])
+
+    return jsonify({'ok': True, 'message': 'OTP sent successfully.'})
+
+
+@auth_bp.post('/otp/verify')
+def verify_otp():
+    payload = request.get_json(silent=True) or {}
+    email = payload.get('email', '').strip().lower()
+    code = payload.get('code', '').strip()
+
+    if not email or not code:
+        return jsonify({'ok': False, 'error': 'Email and code are required.'}), 400
+
+    now = datetime.now(timezone.utc)
+    otp_record = OTP.query.filter(
+        OTP.email == email,
+        OTP.expires_at > now,
+        OTP.used_at == None
+    ).order_by(OTP.created_at.desc()).first()
+
+    if not otp_record or not check_password(otp_record.code_hash, code):
+        return jsonify({'ok': False, 'error': 'Invalid or expired OTP.'}), 400
+
+    otp_record.used_at = now
+
+    user = User.query.filter_by(email=email).first()
+    if user:
+        if not user.username:
+            # User started registration but didn't finish
+            return jsonify({
+                'ok': True,
+                'registered': False,
+                'registration_token': create_access_token(identity=user.id, additional_claims={'purpose': 'registration'}, expires_delta=timedelta(hours=1))
+            })
+
+        user.last_seen_at = now
+        db.session.commit()
+        return _issue_auth_response(user)
+    else:
+        # New user
+        user = User(email=email)
+        db.session.add(user)
+        db.session.commit()
+        return jsonify({
+            'ok': True,
+            'registered': False,
+            'registration_token': create_access_token(identity=user.id, additional_claims={'purpose': 'registration'}, expires_delta=timedelta(hours=1))
+        })
+
+
+@auth_bp.post('/register/complete')
+@jwt_required()
+def register_complete():
+    claims = get_jwt()
+    if claims.get('purpose') != 'registration':
+        return jsonify({'ok': False, 'error': 'Invalid registration session.'}), 403
+
     payload = request.get_json(silent=True) or {}
     username = validate_username(payload.get('username', ''))
-    password = validate_password(payload.get('password', ''))
+    display_name = payload.get('display_name', '')[:20]
+    is_global = bool(payload.get('is_global', False))
     normalized = normalize_username(username)
 
     existing = User.query.filter_by(username_normalized=normalized).first()
-    if existing:
+    if existing and existing.id != current_user.id:
         return jsonify({'ok': False, 'error': 'This username is already taken.'}), 409
 
-    user = User(
-        username=username,
-        username_normalized=normalized,
-        password_hash=hash_password(password),
-    )
-    db.session.add(user)
+    current_user.username = username
+    current_user.username_normalized = normalized
+    current_user.display_name = display_name
+    current_user.is_global = is_global
     db.session.commit()
-    return _issue_auth_response(user, 201)
+
+    return _issue_auth_response(current_user)
 
 
 @auth_bp.post('/login')
-@limiter.limit('20 per hour')
 def login():
-    payload = request.get_json(silent=True) or {}
-    normalized = normalize_username(payload.get('username', ''))
-    password = payload.get('password', '')
+    return jsonify({'ok': False, 'error': 'Standard login is disabled. Use OTP.'}), 405
 
-    user = User.query.filter_by(username_normalized=normalized).first()
-    if user is None or not check_password(user.password_hash, password):
-        return jsonify({'ok': False, 'error': 'Invalid username or password.'}), 401
 
-    user.last_seen_at = datetime.now(timezone.utc)
-    db.session.commit()
-    return _issue_auth_response(user)
+@auth_bp.post('/register')
+def old_register():
+    return jsonify({'ok': False, 'error': 'Standard registration is disabled. Use OTP.'}), 405
 
 
 @auth_bp.post('/logout')

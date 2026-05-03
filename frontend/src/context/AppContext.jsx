@@ -47,6 +47,8 @@ function reducer(state, action) {
 
     case 'SET_ME':
       return { ...state, me: action.me, authStatus: 'authenticated', requiresTotpSetup: action.requiresTotpSetup ?? false }
+    case 'SET_ME_TEMP':
+      return { ...state, me: action.me }
 
     case 'LOGOUT':
       return { ...initState, authStatus: 'unauthenticated' }

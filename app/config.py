@@ -48,7 +48,13 @@ class Config:
     PASSWORD_MIN_LENGTH = int(os.getenv('PASSWORD_MIN_LENGTH', '10'))
     MESSAGE_MAX_LENGTH = int(os.getenv('MESSAGE_MAX_LENGTH', '4000'))
     USERNAME_MIN_LENGTH = int(os.getenv('USERNAME_MIN_LENGTH', '3'))
-    USERNAME_MAX_LENGTH = int(os.getenv('USERNAME_MAX_LENGTH', '24'))
+    USERNAME_MAX_LENGTH = int(os.getenv('USERNAME_MAX_LENGTH', '31'))
+
+    SMTP_HOST = os.getenv('SMTP_HOST', 'mail.grayhat.com.az')
+    SMTP_PORT = int(os.getenv('SMTP_PORT', '465'))
+    SMTP_USER = os.getenv('SMTP_USER', 'otp@grayhat.com.az')
+    SMTP_PASS = os.getenv('SMTP_PASS', '')
+    MAIL_FROM = os.getenv('MAIL_FROM', SMTP_USER)
 
     TOTP_ISSUER = os.getenv('TOTP_ISSUER', 'GrayHat')
     TOTP_ENCRYPTION_KEY = os.getenv('TOTP_ENCRYPTION_KEY', '')

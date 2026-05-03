@@ -14,7 +14,7 @@ export default function AddFriendDialog({ onClose }) {
       <div className="tab-pills">
         {['qr', 'uuid', 'image'].map((v) => (
           <button key={v} className={`tab-pill${tab === v ? ' active' : ''}`} onClick={() => setTab(v)}>
-            {v === 'qr' ? t('myQr') : v === 'uuid' ? t('addByUuid') : t('scanImage')}
+            {v === 'qr' ? t('myQr') : v === 'uuid' ? 'Username / UUID' : t('scanImage')}
           </button>
         ))}
       </div>
@@ -56,7 +56,13 @@ function AddByUUID({ dispatch, toast, onClose, t }) {
     if (!val.trim()) return
     setBusy(true)
     try {
-      const data = await sendFriendRequest({ uuid: val.trim() })
+      const payload = {}
+      if (val.trim().length === 36 && val.trim().includes('-')) {
+        payload.uuid = val.trim()
+      } else {
+        payload.username = val.trim()
+      }
+      const data = await sendFriendRequest(payload)
       if (data.friend) {
         dispatch({ type: 'ADD_FRIEND', friend: data.friend })
         if (data.conversation) dispatch({ type: 'ADD_CONVERSATION', conv: data.conversation })
@@ -76,8 +82,8 @@ function AddByUUID({ dispatch, toast, onClose, t }) {
   return (
     <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="field">
-        <label className="field-label">{t('uuidOrLink')}</label>
-        <input className="field-input" value={val} onChange={(e) => setVal(e.target.value)} placeholder={t('pasteUuidPlaceholder')} autoFocus />
+        <label className="field-label">Username or UUID</label>
+        <input className="field-input" value={val} onChange={(e) => setVal(e.target.value)} placeholder="username or uuid..." autoFocus />
       </div>
       <button className="btn btn-primary" disabled={busy || !val.trim()}>
         {busy ? t('adding') : t('addFriendTitle')}

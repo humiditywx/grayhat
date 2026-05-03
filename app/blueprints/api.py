@@ -387,25 +387,25 @@ def cancel_friend_request(request_id: str):
 @api_bp.post('/friends')
 @jwt_required()
 def create_friendship():
-    from sqlalchemy import text
-
     payload = request.get_json(silent=True) or {}
-    submitted_uuid = str(payload.get('uuid', '')).strip()
+    submitted_query = str(payload.get('uuid') or payload.get('username') or '').strip()
 
-    query = f"SELECT id FROM users WHERE id = '{submitted_uuid}'"
-    row = db.session.execute(text(query)).first()
+    if not submitted_query:
+        return jsonify({'ok': False, 'error': 'UUID or username is required.'}), 400
 
-    if not row:
-        return jsonify({'ok': False, 'error': 'That user does not exist.'}), 404
+    target = None
+    if UUID_PATTERN.fullmatch(submitted_query):
+        target = db.session.get(User, submitted_query)
+    else:
+        normalized = submitted_query.lower()
+        target = User.query.filter_by(username_normalized=normalized, is_global=True).first()
 
-    target_id = row[0]
+    if not target:
+        return jsonify({'ok': False, 'error': 'That user does not exist or is not discoverable.'}), 404
 
+    target_id = target.id
     if target_id == current_user.id:
         return jsonify({'ok': False, 'error': 'You cannot add yourself.'}), 400
-
-    target = db.session.get(User, target_id)
-    if not target:
-        return jsonify({'ok': False, 'error': 'That user does not exist.'}), 404
 
     # Check already friends
     from sqlalchemy import and_
@@ -1040,7 +1040,16 @@ def update_profile():
     payload = request.get_json(silent=True) or {}
     bio = payload.get('bio')
     if bio is not None:
-        current_user.bio = bio[:300]  # hard cap
+        current_user.bio = bio[:300]
+
+    display_name = payload.get('display_name')
+    if display_name is not None:
+        current_user.display_name = display_name[:20]
+
+    is_global = payload.get('is_global')
+    if is_global is not None:
+        current_user.is_global = bool(is_global)
+
     db.session.commit()
     return jsonify({'ok': True, 'user': serialize_user(current_user)})
 

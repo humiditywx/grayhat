@@ -14,7 +14,7 @@ from cryptography.fernet import Fernet
 from flask import current_app
 from werkzeug.security import check_password_hash, generate_password_hash
 
-USERNAME_RE = re.compile(r'^[A-Za-z0-9_]+$')
+USERNAME_RE = re.compile(r'^[a-z0-9._]+$')
 
 
 def normalize_username(username: str) -> str:
@@ -25,13 +25,17 @@ def validate_username(username: str) -> str:
     username = username.strip()
     if not username:
         raise ValueError('Username is required.')
-    min_len = current_app.config['USERNAME_MIN_LENGTH']
-    max_len = current_app.config['USERNAME_MAX_LENGTH']
+    min_len = 3
+    max_len = 31
     if not (min_len <= len(username) <= max_len):
         raise ValueError(f'Username must be between {min_len} and {max_len} characters.')
     if not USERNAME_RE.match(username):
-        raise ValueError('Username can contain only letters, numbers, and underscores.')
+        raise ValueError('Username can contain only lowercase letters, numbers, dots and underscores.')
     return username
+
+
+def generate_secure_otp(length: int = 6) -> str:
+    return ''.join(secrets.choice('0123456789') for _ in range(length))
 
 
 def validate_password(password: str) -> str:

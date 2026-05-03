@@ -20,7 +20,10 @@ def serialize_user(user: User) -> dict:
     avatar_url = f'/api/users/{user.id}/avatar' if user.avatar_storage_name else None
     return {
         'id': user.id,
+        'email': user.email,
         'username': user.username,
+        'display_name': user.display_name or '',
+        'is_global': user.is_global,
         'bio': getattr(user, 'bio', None) or '',
         'totp_enabled': user.totp_enabled,
         'created_at': utc_iso(user.created_at),
@@ -102,7 +105,12 @@ def _last_message_preview(conversation: Conversation) -> str:
 
 def serialize_conversation(conversation: Conversation, current_user_id: str, preview: str | None = None) -> dict:
     partner = _private_partner(conversation, current_user_id) if conversation.kind == 'private' else None
-    title = conversation.title or (partner.username if partner else 'Direct chat')
+
+    if conversation.kind == 'private' and partner:
+        title = partner.display_name or partner.username
+    else:
+        title = conversation.title or 'Direct chat'
+
     share_url = None
     if conversation.kind == 'group' and conversation.public_share_token:
         share_url = f'{public_base_url()}/g/{conversation.public_share_token}'

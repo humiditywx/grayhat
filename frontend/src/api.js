@@ -29,10 +29,13 @@ const patch = (url, body) => request(url, { method: 'PATCH', body: JSON.stringif
 const del  = (url) => request(url, { method: 'DELETE' })
 
 // Auth
-export const authMe        = () => get('/api/auth/me')
-export const authLogin     = (b) => post('/api/auth/login', b)
-export const authRegister  = (b) => post('/api/auth/register', b)
-export const authLogout    = () => post('/api/auth/logout', {})
+export const authMe           = () => get('/api/auth/me')
+export const authLogin        = (b) => post('/api/auth/login', b)
+export const authRegister     = (b) => post('/api/auth/register', b)
+export const sendOtp          = (email) => post('/api/auth/otp/send', { email })
+export const verifyOtp        = (email, code) => post('/api/auth/otp/verify', { email, code })
+export const completeRegister = (b, token) => request('/api/auth/register/complete', { method: 'POST', body: JSON.stringify(b), headers: { 'Authorization': `Bearer ${token}` } })
+export const authLogout       = () => post('/api/auth/logout', {})
 export const totpSetup     = () => post('/api/auth/totp/setup', {})
 export const totpConfirm   = (code) => post('/api/auth/totp/confirm', { code })
 export const passwordReset = (b) => post('/api/auth/password-reset', b)

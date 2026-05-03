@@ -21,11 +21,14 @@ class User(db.Model, TimestampMixin):
     __tablename__ = 'users'
 
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
-    username = db.Column(db.String(24), nullable=False)
-    username_normalized = db.Column(db.String(24), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(512), nullable=False)
+    email = db.Column(db.String(255), unique=True, index=True, nullable=False)
+    username = db.Column(db.String(31), nullable=True)
+    username_normalized = db.Column(db.String(31), unique=True, nullable=True, index=True)
+    display_name = db.Column(db.String(20), nullable=True)
+    password_hash = db.Column(db.String(512), nullable=True)
     totp_secret_encrypted = db.Column(db.Text, nullable=True)
     totp_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    is_global = db.Column(db.Boolean, nullable=False, default=False)
     recovery_codes = db.Column(db.JSON, nullable=False, default=list)
     token_version = db.Column(db.Integer, nullable=False, default=0)
     last_seen_at = db.Column(db.DateTime(timezone=True), nullable=True)
@@ -38,6 +41,17 @@ class User(db.Model, TimestampMixin):
 
     conversations = db.relationship('ConversationParticipant', back_populates='user', cascade='all, delete-orphan')
     sent_messages = db.relationship('Message', back_populates='sender', cascade='all, delete-orphan')
+
+
+class OTP(db.Model):
+    __tablename__ = 'otps'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
+    email = db.Column(db.String(255), nullable=False, index=True)
+    code_hash = db.Column(db.String(512), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    used_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
 
 class Friendship(db.Model, TimestampMixin):

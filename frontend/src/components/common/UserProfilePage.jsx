@@ -76,7 +76,8 @@ function ProfilePageInner({ userId, dispatch, toast, state }) {
                 }
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="profile-username">{user?.username}</div>
+                <div className="profile-username">{user?.display_name || user?.username}</div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)', marginTop: -2 }}>@{user?.username}</div>
                 {user?.bio && (
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)', marginTop: 2, lineHeight: 1.4 }}>
                     {user.bio}
