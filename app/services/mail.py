@@ -19,19 +19,23 @@ def send_otp_email(to_email: str, otp_code: str, app_name: str, expires_in_mins:
         return
 
     # Load template
-    template_path = Path('/home/humiditywx/Downloads/otp-login.html')
+    template_path = Path(current_app.root_path) / 'static' / 'otp-login.html'
     if not template_path.exists():
-        # Fallback to simple text if template not found
+        current_app.logger.warning(f"Template not found at {template_path}. Falling back to text.")
         html_content = f"Your OTP for {app_name} is {otp_code}. It expires in {expires_in_mins} minutes."
     else:
-        with open(template_path, 'r') as f:
-            html_content = f.read()
+        try:
+            with open(template_path, 'r') as f:
+                html_content = f.read()
 
-        # Replace placeholders
-        html_content = html_content.replace('${appname}', app_name)
-        html_content = html_content.replace('${time}', f"{expires_in_mins} minutes")
-        html_content = html_content.replace('${otp}', otp_code)
-        html_content = html_content.replace('${toEmail}', to_email)
+            # Replace placeholders
+            html_content = html_content.replace('${appname}', app_name)
+            html_content = html_content.replace('${time}', f"{expires_in_mins} minutes")
+            html_content = html_content.replace('${otp}', otp_code)
+            html_content = html_content.replace('${toEmail}', to_email)
+        except Exception as e:
+            current_app.logger.error(f"Error reading template at {template_path}: {e}")
+            html_content = f"Your OTP for {app_name} is {otp_code}. It expires in {expires_in_mins} minutes."
 
     msg = MIMEMultipart('alternative')
     msg['Subject'] = f"Login to {app_name}"
@@ -53,5 +57,7 @@ def send_otp_email(to_email: str, otp_code: str, app_name: str, expires_in_mins:
                 server.login(smtp_user, smtp_pass)
                 server.send_message(msg)
     except Exception as e:
-        current_app.logger.error(f"Failed to send email: {e}")
-        raise RuntimeError("Failed to send OTP email.")
+        import traceback
+        current_app.logger.error(f"Failed to send email to {to_email}: {str(e)}")
+        current_app.logger.error(traceback.format_exc())
+        raise RuntimeError(f"Failed to send OTP email: {str(e)}")
