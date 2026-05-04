@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from werkzeug.middleware.proxy_fix import ProxyFix
+
 from datetime import datetime, timedelta, timezone
 
 from flask import Flask, abort, jsonify, request
@@ -23,6 +25,13 @@ from .models import RevokedToken, User
 
 def create_app(config_object: type[Config] = Config) -> Flask:
     app = Flask(__name__)
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=1,
+        x_proto=1,
+        x_host=1,
+        x_port=1,
+    )
     app.config.from_object(config_object)
     app.config['RATELIMIT_STORAGE_URI'] = app.config['RATE_LIMIT_STORAGE_URI']
     app.config['RATELIMIT_HEADERS_ENABLED'] = True
