@@ -108,6 +108,19 @@ def verify_otp():
                 )
             })
 
+        # Check if password setup is needed for already registered user
+        if not user.password_hash:
+            return jsonify({
+                'ok': True,
+                'registered': True,
+                'needs_password': True,
+                'password_setup_token': create_access_token(
+                    identity=user.id,
+                    additional_claims={'purpose': 'password_setup', 'tv': user.token_version or 0},
+                    expires_delta=timedelta(hours=1)
+                )
+            })
+
         user.last_seen_at = now
         db.session.commit()
         return _issue_auth_response(user)
@@ -136,6 +149,7 @@ def register_complete():
 
     payload = request.get_json(silent=True) or {}
     username = validate_username(payload.get('username', ''))
+    password = validate_password(payload.get('password', ''))
     display_name = payload.get('display_name', '')[:20]
     is_global = bool(payload.get('is_global', False))
     normalized = normalize_username(username)
@@ -147,7 +161,24 @@ def register_complete():
     current_user.username = username
     current_user.username_normalized = normalized
     current_user.display_name = display_name
+    current_user.password_hash = hash_password(password)
     current_user.is_global = is_global
+    db.session.commit()
+
+    return _issue_auth_response(current_user)
+
+
+@auth_bp.post('/password/setup')
+@jwt_required()
+def password_setup():
+    claims = get_jwt()
+    if claims.get('purpose') != 'password_setup':
+        return jsonify({'ok': False, 'error': 'Invalid session.'}), 403
+
+    payload = request.get_json(silent=True) or {}
+    password = validate_password(payload.get('password', ''))
+
+    current_user.password_hash = hash_password(password)
     db.session.commit()
 
     return _issue_auth_response(current_user)
@@ -155,7 +186,29 @@ def register_complete():
 
 @auth_bp.post('/login')
 def login():
-    return jsonify({'ok': False, 'error': 'Standard login is disabled. Use OTP.'}), 405
+    payload = request.get_json(silent=True) or {}
+    email = payload.get('email', '').strip().lower()
+    password = payload.get('password', '').strip()
+
+    if not email or not password:
+        return jsonify({'ok': False, 'error': 'Email and password are required.'}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({'ok': False, 'error': 'No account found with this email. Please use OTP to register.'}), 404
+
+    if not user.username:
+        return jsonify({'ok': False, 'error': 'Registration is incomplete. Please use OTP to continue.'}), 400
+
+    if not user.password_hash:
+        return jsonify({'ok': False, 'error': 'Password not set. Please login via OTP first.'}), 400
+
+    if not check_password(user.password_hash, password):
+        return jsonify({'ok': False, 'error': 'Invalid password.'}), 401
+
+    user.last_seen_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return _issue_auth_response(user)
 
 
 @auth_bp.post('/register')

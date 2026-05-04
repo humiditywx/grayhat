@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
-import { sendOtp, verifyOtp, completeRegister, totpSetup, totpConfirm } from '../../api.js'
+import { sendOtp, verifyOtp, completeRegister, totpSetup, totpConfirm, authLogin, setupPassword } from '../../api.js'
 
 export default function AuthPage() {
   const { dispatch, toast } = useApp()
   const { t } = useLocale()
-  const [step, setStep] = useState('email') // email, otp, register, totp, global
+  const [step, setStep] = useState('email') // email, otp, register, totp, global, password_setup
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [regToken, setRegToken] = useState('')
-  const [regForm, setRegForm] = useState({ username: '', display_name: '', is_global: false })
+  const [regForm, setRegForm] = useState({ username: '', display_name: '', password: '', is_global: false })
   const [totpData, setTotpData] = useState(null)
   const [busy, setBusy] = useState(false)
 
@@ -17,9 +18,16 @@ export default function AuthPage() {
     e.preventDefault()
     setBusy(true)
     try {
-      await sendOtp(email)
-      setStep('otp')
-      toast(t('otpSent'), 'success')
+      if (password) {
+        // Try password login
+        const data = await authLogin({ email, password })
+        dispatch({ type: 'SET_ME', me: data.user, requiresTotpSetup: data.requires_totp_setup })
+      } else {
+        // Fallback to OTP
+        await sendOtp(email)
+        setStep('otp')
+        toast(t('otpSent'), 'success')
+      }
     } catch (err) {
       toast(err.message, 'error')
     } finally {
@@ -33,6 +41,9 @@ export default function AuthPage() {
       const data = await verifyOtp(email, code)
       if (data.user) {
         dispatch({ type: 'SET_ME', me: data.user, requiresTotpSetup: data.requires_totp_setup })
+      } else if (data.needs_password) {
+        setRegToken(data.password_setup_token)
+        setStep('password_setup')
       } else {
         setRegToken(data.registration_token)
         setStep('register')
@@ -49,8 +60,21 @@ export default function AuthPage() {
     setBusy(true)
     try {
       const data = await completeRegister(regForm, regToken)
-      dispatch({ type: 'SET_ME_TEMP', me: data.user }) // Keep user in state but don't finish auth yet
+      dispatch({ type: 'SET_ME_TEMP', me: data.user })
       setStep('totp')
+    } catch (err) {
+      toast(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onPasswordSetupSubmit = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const data = await setupPassword({ password: regForm.password }, regToken)
+      dispatch({ type: 'SET_ME', me: data.user, requiresTotpSetup: data.requires_totp_setup })
     } catch (err) {
       toast(err.message, 'error')
     } finally {
@@ -71,6 +95,7 @@ export default function AuthPage() {
           <form className="auth-form" onSubmit={onEmailSubmit}>
             <div className="auth-tagline">{t('welcome')}</div>
             <Field label={t('emailAddress')} type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
+            <Field label={t('password')} type="password" value={password} onChange={setPassword} placeholder={t('optional')} hint="Enter to login with password, or leave empty for OTP" />
             <button className="btn btn-primary" disabled={busy || !email}>
               {busy ? t('sending') : t('continue')}
             </button>
@@ -79,6 +104,25 @@ export default function AuthPage() {
 
         {step === 'otp' && (
           <OtpForm onSubmit={onOtpSubmit} busy={busy} t={t} onBack={() => setStep('email')} />
+        )}
+
+        {step === 'password_setup' && (
+          <form className="auth-form" onSubmit={onPasswordSetupSubmit}>
+            <div className="auth-tagline">Set Your Password</div>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)', textAlign: 'center', marginBottom: '20px' }}>
+              Already registered? Great! Please set a password for your next login.
+            </p>
+            <Field
+              label="New Password"
+              type="password"
+              value={regForm.password}
+              onChange={(v) => setRegForm({ ...regForm, password: v })}
+              placeholder="Strong password"
+            />
+            <button className="btn btn-primary" disabled={busy || regForm.password.length < 10}>
+              {busy ? 'Saving...' : 'Set Password'}
+            </button>
+          </form>
         )}
 
         {step === 'register' && (
@@ -97,7 +141,14 @@ export default function AuthPage() {
               onChange={(v) => setRegForm({ ...regForm, display_name: v })}
               placeholder={t('optional')}
             />
-            <button className="btn btn-primary" disabled={busy || regForm.username.length < 3}>
+            <Field
+              label={t('password')}
+              type="password"
+              value={regForm.password}
+              onChange={(v) => setRegForm({ ...regForm, password: v })}
+              placeholder="Min 10 chars, upper, lower, digit"
+            />
+            <button className="btn btn-primary" disabled={busy || regForm.username.length < 3 || regForm.password.length < 10}>
               {busy ? t('saving') : t('continue')}
             </button>
           </form>
