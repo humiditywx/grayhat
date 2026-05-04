@@ -1,10 +1,9 @@
 function getCsrf() {
-  return (
-    document.cookie
-      .split('; ')
-      .find((r) => r.startsWith('csrf_access_token='))
-      ?.split('=')[1] || ''
-  )
+  const cookie = document.cookie
+    .split('; ')
+    .find((r) => r.startsWith('csrf_access_token='))
+  const token = cookie ? cookie.split('=')[1] : null
+  return (token && token !== 'undefined' && token !== 'null') ? token : ''
 }
 
 async function request(url, options = {}) {
@@ -14,7 +13,8 @@ async function request(url, options = {}) {
     headers['Content-Type'] = 'application/json'
   }
   if (!['GET', 'HEAD'].includes(method)) {
-    headers['X-CSRF-TOKEN'] = getCsrf()
+    const csrf = getCsrf()
+    if (csrf) headers['X-CSRF-TOKEN'] = csrf
   }
   const res = await fetch(url, { ...options, headers, credentials: 'include' })
   if (res.status === 204) return null
@@ -26,7 +26,7 @@ async function request(url, options = {}) {
 const get  = (url) => request(url)
 const post = (url, body) => request(url, { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body) })
 const patch = (url, body) => request(url, { method: 'PATCH', body: JSON.stringify(body) })
-const del  = (url) => request(url, { method: 'DELETE' })
+const del  = (url) => request(url)
 
 // Auth
 export const authMe           = () => get('/api/auth/me')
@@ -34,8 +34,17 @@ export const authLogin        = (b) => post('/api/auth/login', b)
 export const authRegister     = (b) => post('/api/auth/register', b)
 export const sendOtp          = (email) => post('/api/auth/otp/send', { email })
 export const verifyOtp        = (email, code) => post('/api/auth/otp/verify', { email, code })
-export const completeRegister = (b, token) => request('/api/auth/register/complete', { method: 'POST', body: JSON.stringify(b), headers: { 'Authorization': `Bearer ${token}` } })
-export const setupPassword    = (b, token) => request('/api/auth/password/setup', { method: 'POST', body: JSON.stringify(b), headers: { 'Authorization': `Bearer ${token}` } })
+export const completeRegister = (b, token) => request('/api/auth/register/complete', { 
+  method: 'POST', 
+  body: JSON.stringify(b), 
+  headers: token ? { 'Authorization': `Bearer ${token}` } : {} 
+})
+export const setupPassword    = (b, token) => request('/api/auth/password/setup', { 
+  method: 'POST', 
+  body: JSON.stringify(b), 
+  headers: token ? { 'Authorization': `Bearer ${token}` } : {} 
+})
+
 export const authLogout       = () => post('/api/auth/logout', {})
 export const totpSetup     = () => post('/api/auth/totp/setup', {})
 export const totpConfirm   = (code) => post('/api/auth/totp/confirm', { code })

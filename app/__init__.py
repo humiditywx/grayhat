@@ -159,14 +159,23 @@ def _register_app_hooks(app: Flask) -> None:
 
     @app.before_request
     def update_presence():
+        # Only attempt to verify JWT if the access cookie is present, 
+        # to avoid unnecessary parsing/overhead or potential issues on public routes.
+        if not request.cookies.get(app.config.get('JWT_ACCESS_COOKIE_NAME', 'messenger_access')):
+            return
+
         try:
+            # use optional=True to ensure this hook doesn't trigger 401 responses
+            # globally for invalid/expired tokens, letting individual routes handle it.
+            from flask_jwt_extended import verify_jwt_in_request
+            verify_jwt_in_request(optional=True)
             identity = get_jwt_identity()
+            if identity:
+                user = db.session.get(User, identity)
+                if user:
+                    user.last_seen_at = datetime.now(timezone.utc)
         except Exception:
-            identity = None
-        if identity:
-            user = db.session.get(User, identity)
-            if user:
-                user.last_seen_at = datetime.now(timezone.utc)
+            pass
 
     @app.after_request
     def refresh_expiring_jwt(response):
