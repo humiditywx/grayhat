@@ -1,12 +1,16 @@
 openapi: 3.0.3
 info:
-  title: Pentastic API
+  title: GrayHat API
   description: |
-    REST API for **Pentastic**, a secure social messaging platform.
+    REST API for **GrayHat**, a secure social messaging platform.
 
     ### Authentication
     All protected endpoints use **JWT stored in an HttpOnly cookie** (`messenger_access`).
-    Call `POST /api/auth/login` first — the cookie is set automatically.
+    Users can authenticate with email + password, or start with email OTP.
+    New accounts are created by:
+    1. `POST /api/auth/otp/send`
+    2. `POST /api/auth/otp/verify`
+    3. `POST /api/auth/register/complete` with the returned registration token.
 
     For mutating requests (POST / PATCH / DELETE) the server also requires the
     `X-CSRF-TOKEN` header. The Swagger UI on this page extracts the CSRF token
@@ -14,11 +18,11 @@ info:
     it manually.
 
     ### Rate limits
-    - `POST /api/auth/register` → 10 / hour
-    - `POST /api/auth/login`, `POST /api/auth/password-reset` → 20 / hour
+    - `POST /api/auth/otp/send` → 3 / 15 minutes
+    - `POST /api/auth/password-reset` → 20 / hour
   version: "1.0.0"
   contact:
-    name: Pentastic
+    name: GrayHat
 
 servers:
   - url: /
@@ -26,7 +30,7 @@ servers:
 
 tags:
   - name: auth
-    description: Register, login, logout, TOTP setup, and password management.
+    description: Email OTP onboarding, password login, logout, TOTP setup, and password management.
   - name: bootstrap
     description: Load the complete initial application state in one request.
   - name: friends
@@ -48,7 +52,12 @@ components:
       type: apiKey
       in: cookie
       name: messenger_access
-      description: JWT issued on login/register. Set automatically by the browser.
+      description: JWT issued on login or OTP onboarding completion. Set automatically by the browser.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived onboarding JWT returned by OTP verification.
 
   schemas:
     # ─── Primitives ─────────────────────────────────────────────────────────────
@@ -71,6 +80,60 @@ components:
           example: "Invalid username or password."
       required: [ok, error]
 
+    Password:
+      type: string
+      minLength: 8
+      description: Must be at least 8 symbols and include one uppercase letter, one lowercase letter, and one number.
+      example: "Abcdefg1"
+
+    AuthSessionResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        user:
+          $ref: '#/components/schemas/User'
+        requires_totp_setup:
+          type: boolean
+          description: True until the user enables TOTP.
+      required: [ok, user, requires_totp_setup]
+
+    RegistrationTokenResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        registered:
+          type: boolean
+          example: false
+        registration_token:
+          type: string
+          description: >
+            One-hour JWT. Send as `Authorization: Bearer <token>` to
+            `/api/auth/register/complete`.
+      required: [ok, registered, registration_token]
+
+    PasswordSetupTokenResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        registered:
+          type: boolean
+          example: true
+        needs_password:
+          type: boolean
+          example: true
+        password_setup_token:
+          type: string
+          description: >
+            One-hour JWT. Send as `Authorization: Bearer <token>` to
+            `/api/auth/password/setup`.
+      required: [ok, registered, needs_password, password_setup_token]
+
     # ─── User ───────────────────────────────────────────────────────────────────
     User:
       type: object
@@ -79,12 +142,23 @@ components:
           type: string
           format: uuid
           example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        email:
+          type: string
+          format: email
+          example: "alice@example.com"
         username:
           type: string
+          nullable: true
           example: "alice"
+        display_name:
+          type: string
+          example: "Alice"
+        is_global:
+          type: boolean
+          description: Whether this user can be discovered by username.
         bio:
           type: string
-          example: "Hey there! I'm using Pentastic."
+          example: "Hey there! I'm using GrayHat."
         totp_enabled:
           type: boolean
           example: true
@@ -336,14 +410,95 @@ paths:
   # AUTH
   # ═══════════════════════════════════════════════════════════════════════════════
 
-  /api/auth/register:
+  /api/auth/otp/send:
     post:
       tags: [auth]
-      summary: Register a new account
+      summary: Send email OTP
       description: >
-        Creates a new user account and returns a JWT cookie.
-        Rate-limited to **10 requests per hour**.
+        Sends a one-time password to the supplied email address. The code is
+        valid for 15 minutes. Rate-limited to **3 requests per 15 minutes**.
       security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "alice@example.com"
+      responses:
+        '200':
+          description: OTP sent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  message: { type: string, example: "OTP sent successfully." }
+        '400':
+          description: Email missing.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/auth/otp/verify:
+    post:
+      tags: [auth]
+      summary: Verify email OTP
+      description: >
+        Verifies an email OTP. Existing users with a completed password receive
+        an authenticated session cookie. New or incomplete users receive a
+        short-lived token for the next onboarding step.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "alice@example.com"
+                code:
+                  type: string
+                  example: "123456"
+      responses:
+        '200':
+          description: >
+            OTP accepted. Response is one of: authenticated session,
+            registration token, or password-setup token.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AuthSessionResponse'
+                  - $ref: '#/components/schemas/RegistrationTokenResponse'
+                  - $ref: '#/components/schemas/PasswordSetupTokenResponse'
+        '400':
+          description: Missing, invalid, expired, or already used OTP.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/auth/register/complete:
+    post:
+      tags: [auth]
+      summary: Complete OTP registration
+      description: >
+        Completes registration for a user created by OTP verification. Requires
+        `Authorization: Bearer <registration_token>` returned by
+        `/api/auth/otp/verify`; the token must contain purpose `registration`.
+        On success, sets the authenticated JWT cookie.
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -355,27 +510,33 @@ paths:
                 username:
                   type: string
                   minLength: 3
-                  maxLength: 24
-                  pattern: '^[A-Za-z0-9_]+$'
-                  example: alice
-                password:
+                  maxLength: 31
+                  pattern: '^[a-z0-9._]+$'
+                  description: Lowercase letters, numbers, dots, and underscores only.
+                  example: "alice_1"
+                display_name:
                   type: string
-                  minLength: 10
-                  description: Must include at least one uppercase letter, one lowercase letter, and one number.
-                  example: "s3cur3P@ss"
+                  maxLength: 20
+                  example: "Alice"
+                password:
+                  $ref: '#/components/schemas/Password'
+                is_global:
+                  type: boolean
+                  description: Allow other users to find this account by username.
+                  default: false
       responses:
-        '201':
-          description: Account created. JWT cookie is set.
+        '200':
+          description: Registration complete. JWT cookie is set.
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean, example: true }
-                  user: { $ref: '#/components/schemas/User' }
-                  requires_totp_setup: { type: boolean, example: true }
+              schema: { $ref: '#/components/schemas/AuthSessionResponse' }
         '400':
-          description: Validation error (missing or invalid fields).
+          description: Validation error.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Token is not a registration session.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -385,13 +546,50 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
 
+  /api/auth/password/setup:
+    post:
+      tags: [auth]
+      summary: Set password after OTP login
+      description: >
+        Sets a password for an already registered user who does not yet have
+        one. Requires `Authorization: Bearer <password_setup_token>` returned by
+        `/api/auth/otp/verify`; the token must contain purpose `password_setup`.
+        On success, sets the authenticated JWT cookie.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  $ref: '#/components/schemas/Password'
+      responses:
+        '200':
+          description: Password set. JWT cookie is set.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSessionResponse' }
+        '400':
+          description: Invalid password.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Token is not a password setup session.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
   /api/auth/login:
     post:
       tags: [auth]
       summary: Log in
       description: >
-        Authenticates with username + password and sets the JWT cookie.
-        Rate-limited to **20 requests per hour**.
+        Authenticates with email + password and sets the JWT cookie.
       security: []
       requestBody:
         required: true
@@ -399,23 +597,46 @@ paths:
           application/json:
             schema:
               type: object
-              required: [username, password]
+              required: [email, password]
               properties:
-                username: { type: string, example: alice }
-                password: { type: string, example: "s3cur3P@ss" }
+                email:
+                  type: string
+                  format: email
+                  example: "alice@example.com"
+                password:
+                  type: string
+                  example: "Abcdefg1"
       responses:
         '200':
           description: Login successful. JWT cookie is set.
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  ok: { type: boolean, example: true }
-                  user: { $ref: '#/components/schemas/User' }
-                  requires_totp_setup: { type: boolean }
+              schema: { $ref: '#/components/schemas/AuthSessionResponse' }
+        '400':
+          description: Missing password/email, incomplete registration, or password not set.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
         '401':
           description: Invalid credentials.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: No account exists for this email.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/auth/register:
+    post:
+      tags: [auth]
+      summary: Disabled legacy registration endpoint
+      description: Standard username/password registration is disabled. Use the email OTP flow instead.
+      security: []
+      responses:
+        '405':
+          description: Registration disabled.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -526,10 +747,7 @@ paths:
                   description: 6-digit TOTP code or an uppercase recovery code.
                   example: "123456"
                 new_password:
-                  type: string
-                  minLength: 10
-                  description: Must include at least one uppercase letter, one lowercase letter, and one number.
-                  example: "newP@ssw0rd"
+                  $ref: '#/components/schemas/Password'
       responses:
         '200':
           description: Password reset and logged in.
@@ -562,9 +780,7 @@ paths:
               properties:
                 current_password: { type: string }
                 new_password:
-                  type: string
-                  minLength: 10
-                  description: Must include at least one uppercase letter, one lowercase letter, and one number.
+                  $ref: '#/components/schemas/Password'
       responses:
         '200':
           description: Password changed; new JWT cookie issued.
@@ -662,10 +878,10 @@ paths:
 
     post:
       tags: [friends]
-      summary: Send a friend request (by UUID or add-link)
+      summary: Send a friend request by UUID or discoverable username
       description: >
-        Sends a friend request to a user identified by their UUID or
-        `https://…/add/{uuid}` add-link. If the target has already sent you a
+        Sends a friend request to a user identified by UUID, or by username if
+        that user has `is_global` enabled. If the target has already sent you a
         request, it auto-accepts and returns the new friendship + conversation.
       requestBody:
         required: true
@@ -673,24 +889,32 @@ paths:
           application/json:
             schema:
               type: object
-              required: [uuid]
               properties:
                 uuid:
                   type: string
-                  description: >
-                    User UUID, full add-link URL
-                    (`https://…/add/{uuid}`), or deeplink (`expressmessenger:add:{uuid}`).
+                  format: uuid
+                  description: Target user's UUID.
                   example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                username:
+                  type: string
+                  description: Target user's username. Only works for globally discoverable users.
+                  example: "alice_1"
       responses:
         '200':
           description: Friend request sent, or auto-accepted (if mutual).
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  ok: { type: boolean, example: true }
-                  request: { $ref: '#/components/schemas/FriendRequest' }
+                oneOf:
+                  - type: object
+                    properties:
+                      ok: { type: boolean, example: true }
+                      request: { $ref: '#/components/schemas/FriendRequest' }
+                  - type: object
+                    properties:
+                      ok: { type: boolean, example: true }
+                      friend: { $ref: '#/components/schemas/Friend' }
+                      conversation: { $ref: '#/components/schemas/Conversation' }
         '400':
           description: Invalid UUID, already friends, or request already sent.
           content:
@@ -702,7 +926,7 @@ paths:
       tags: [friends]
       summary: Send a friend request by scanning a QR image
       description: >
-        Upload an image containing a Pentastic add-friend QR code.
+        Upload an image containing a GrayHat add-friend QR code.
         Decodes the QR and sends the friend request (or auto-accepts if mutual).
       requestBody:
         required: true
@@ -722,10 +946,16 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  ok: { type: boolean, example: true }
-                  request: { $ref: '#/components/schemas/FriendRequest' }
+                oneOf:
+                  - type: object
+                    properties:
+                      ok: { type: boolean, example: true }
+                      request: { $ref: '#/components/schemas/FriendRequest' }
+                  - type: object
+                    properties:
+                      ok: { type: boolean, example: true }
+                      friend: { $ref: '#/components/schemas/Friend' }
+                      conversation: { $ref: '#/components/schemas/Conversation' }
         '400':
           description: No QR found, invalid payload, or already friends.
           content:
@@ -1486,8 +1716,8 @@ paths:
   /api/users/me/profile:
     patch:
       tags: [users]
-      summary: Update profile bio
-      description: Updates the current user's bio (max 300 characters).
+      summary: Update profile settings
+      description: Updates the current user's bio, display name, and discoverability.
       requestBody:
         required: true
         content:
@@ -1495,7 +1725,17 @@ paths:
             schema:
               type: object
               properties:
-                bio: { type: string, maxLength: 300, example: "Coffee lover ☕" }
+                bio:
+                  type: string
+                  maxLength: 300
+                  example: "Coffee lover"
+                display_name:
+                  type: string
+                  maxLength: 20
+                  example: "Alice"
+                is_global:
+                  type: boolean
+                  description: Allow other users to find this account by username.
       responses:
         '200':
           description: Profile updated.

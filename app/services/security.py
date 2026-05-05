@@ -15,6 +15,7 @@ from flask import current_app
 from werkzeug.security import check_password_hash, generate_password_hash
 
 USERNAME_RE = re.compile(r'^[a-z0-9._]+$')
+PASSWORD_MIN_LENGTH = 8
 
 
 def normalize_username(username: str) -> str:
@@ -41,9 +42,8 @@ def generate_secure_otp(length: int = 6) -> str:
 def validate_password(password: str) -> str:
     if not password:
         raise ValueError('Password is required.')
-    min_len = current_app.config['PASSWORD_MIN_LENGTH']
-    if len(password) < min_len:
-        raise ValueError(f'Password must be at least {min_len} characters long.')
+    if len(password) < PASSWORD_MIN_LENGTH:
+        raise ValueError(f'Password must be at least {PASSWORD_MIN_LENGTH} characters long.')
     if not re.search(r'[A-Z]', password):
         raise ValueError('Password must include at least one uppercase letter.')
     if not re.search(r'[a-z]', password):

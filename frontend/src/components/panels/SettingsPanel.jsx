@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext.jsx'
 import { useLocale, SUPPORTED_LOCALES } from '../../i18n/index.jsx'
 import { uploadAvatar, passwordChange, authLogout, totpSetup, totpConfirm } from '../../api.js'
 import { useTheme } from '../../hooks/useTheme.js'
+import PasswordRequirements, { isPasswordValid } from '../common/PasswordRequirements.jsx'
 
 export default function SettingsPanel() {
   const { state, dispatch, toast } = useApp()
@@ -180,6 +181,7 @@ function ChangePasswordForm({ toast, dispatch, t }) {
 
   const handle = async (e) => {
     e.preventDefault()
+    if (!isPasswordValid(form.new_password)) { toast('Password does not meet the requirements.', 'error'); return }
     if (form.new_password !== form.confirm) { toast(t('passwordsNoMatch'), 'error'); return }
     setBusy(true)
     try {
@@ -200,9 +202,10 @@ function ChangePasswordForm({ toast, dispatch, t }) {
         <div className="field" key={key}>
           <label className="field-label">{label}</label>
           <input className="field-input" type="password" value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+          {key === 'new_password' && <PasswordRequirements password={form.new_password} />}
         </div>
       ))}
-      <button className="btn btn-primary btn-sm" disabled={busy}>
+      <button className="btn btn-primary btn-sm" disabled={busy || !isPasswordValid(form.new_password) || form.new_password !== form.confirm}>
         {busy ? t('saving') : t('updatePassword')}
       </button>
     </form>

@@ -7,7 +7,7 @@ from app import create_app
 from app.config import TestConfig
 from app.extensions import db
 from app.models import Attachment, Conversation, ConversationParticipant, FriendRequest, Friendship, User
-from app.services.security import decrypt_secret, verify_totp
+from app.services.security import decrypt_secret, validate_password, verify_totp
 
 
 class MessengerSmokeTest(unittest.TestCase):
@@ -52,6 +52,21 @@ class MessengerSmokeTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json['ok'])
         return response
+
+    def test_password_requirements_are_exact(self):
+        self.assertEqual(validate_password('Abc12345'), 'Abc12345')
+        self.assertEqual(validate_password('Abcdefg1'), 'Abcdefg1')
+
+        invalid_passwords = [
+            'Abc1234',
+            'abc12345',
+            'ABC12345',
+            'Abcdefgh',
+        ]
+        for password in invalid_passwords:
+            with self.subTest(password=password):
+                with self.assertRaises(ValueError):
+                    validate_password(password)
 
     def test_register_totp_confirm_and_bootstrap(self):
         register = self._register('Alice_123')

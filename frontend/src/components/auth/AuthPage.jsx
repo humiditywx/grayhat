@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
 import { sendOtp, verifyOtp, completeRegister, totpSetup, totpConfirm, authLogin, setupPassword } from '../../api.js'
+import PasswordRequirements, { isPasswordValid } from '../common/PasswordRequirements.jsx'
 
 export default function AuthPage() {
   const { dispatch, toast } = useApp()
@@ -117,9 +118,10 @@ export default function AuthPage() {
               type="password"
               value={regForm.password}
               onChange={(v) => setRegForm({ ...regForm, password: v })}
-              placeholder="Strong password"
+              placeholder="Enter password"
             />
-            <button className="btn btn-primary" disabled={busy || regForm.password.length < 10}>
+            <PasswordRequirements password={regForm.password} />
+            <button className="btn btn-primary" disabled={busy || !isPasswordValid(regForm.password)}>
               {busy ? 'Saving...' : 'Set Password'}
             </button>
           </form>
@@ -146,9 +148,10 @@ export default function AuthPage() {
               type="password"
               value={regForm.password}
               onChange={(v) => setRegForm({ ...regForm, password: v })}
-              placeholder="Min 10 chars, upper, lower, digit"
+              placeholder="Enter password"
             />
-            <button className="btn btn-primary" disabled={busy || regForm.username.length < 3 || regForm.password.length < 10}>
+            <PasswordRequirements password={regForm.password} />
+            <button className="btn btn-primary" disabled={busy || regForm.username.length < 3 || !isPasswordValid(regForm.password)}>
               {busy ? t('saving') : t('continue')}
             </button>
           </form>
