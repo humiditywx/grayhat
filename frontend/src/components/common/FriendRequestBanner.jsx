@@ -3,6 +3,7 @@ import { useSocket } from '../../context/SocketContext.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import Avatar from './Avatar.jsx'
 import { acceptFriendRequest, declineFriendRequest } from '../../api.js'
+import AeroIcon from '../icons/AeroIcon.jsx'
 
 export default function FriendRequestBanner() {
   const { on } = useSocket()
@@ -77,9 +78,7 @@ export default function FriendRequestBanner() {
           disabled={busy}
           title="Decline"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.3))' }}>
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
+          <AeroIcon name="close" size={15} variant="glyph" />
         </button>
         <button
           className="req-action-accept"
@@ -87,9 +86,7 @@ export default function FriendRequestBanner() {
           disabled={busy}
           title="Accept"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.3))' }}>
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
+          <AeroIcon name="check" size={15} variant="glyph" />
         </button>
       </div>
     </div>

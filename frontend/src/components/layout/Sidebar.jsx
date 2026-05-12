@@ -8,6 +8,7 @@ import InboxPanel from '../panels/InboxPanel.jsx'
 import ProfilePanel from '../panels/ProfilePanel.jsx'
 import AddFriendDialog from '../dialogs/AddFriendDialog.jsx'
 import CreateGroupDialog from '../dialogs/CreateGroupDialog.jsx'
+import AeroIcon from '../icons/AeroIcon.jsx'
 import { sendFriendRequest, joinGroup, postStory, sendAttachment } from '../../api.js'
 
 function fmtTime(iso) {
@@ -125,7 +126,9 @@ function CameraActionModal({ file, onClose, dispatch, toast, conversations }) {
           <span style={{ fontWeight: 700, fontSize: 'var(--text-base)' }}>
             {view === 'send-picker' ? 'Send to…' : 'Use photo'}
           </span>
-          <button className="btn-icon" onClick={onClose}>✕</button>
+          <button className="btn-icon" onClick={onClose}>
+            <AeroIcon name="close" size={18} />
+          </button>
         </div>
 
         {view === 'options' && (
@@ -139,33 +142,23 @@ function CameraActionModal({ file, onClose, dispatch, toast, conversations }) {
 
             <div className="camera-options">
               <button className="camera-option-btn" onClick={handleStory} disabled={busy}>
-                <div className="camera-option-icon" style={{ background: 'linear-gradient(135deg, #E879F9, var(--primary))' }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-                  </svg>
+                <div className="camera-option-icon">
+                  <AeroIcon name="story" size={36} />
                 </div>
                 <span>Add to Story</span>
               </button>
 
               <button className="camera-option-btn" onClick={() => setView('send-picker')} disabled={busy}>
-                <div className="camera-option-icon" style={{ background: 'var(--primary)' }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                  </svg>
+                <div className="camera-option-icon">
+                  <AeroIcon name="send" size={36} />
                 </div>
                 <span>Send to Someone</span>
               </button>
 
               {!isVideo && (
                 <button className="camera-option-btn" onClick={handleScanQr} disabled={busy}>
-                  <div className="camera-option-icon" style={{ background: '#0EA5E9' }}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-                      <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-                      <rect x="3" y="14" width="7" height="7" rx="1"/>
-                      <line x1="14" y1="14" x2="14" y2="14.01"/><line x1="17" y1="14" x2="17" y2="14.01"/>
-                      <line x1="20" y1="14" x2="20" y2="17"/><line x1="14" y1="17" x2="17" y2="17"/>
-                      <line x1="17" y1="20" x2="20" y2="20"/>
-                    </svg>
+                  <div className="camera-option-icon">
+                    <AeroIcon name="qr" size={36} />
                   </div>
                   <span>Scan QR</span>
                 </button>
@@ -181,9 +174,7 @@ function CameraActionModal({ file, onClose, dispatch, toast, conversations }) {
               style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}
               onClick={() => setView('options')}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="15 18 9 12 15 6"/>
-              </svg>
+              <AeroIcon name="back" size={14} variant="glyph" />
               Back
             </button>
             <div className="send-picker">
@@ -257,9 +248,7 @@ export default function Sidebar({ mobileHidden }) {
           {panel === 'chats' && chatSubView === 'inbox' ? (
             <>
               <button className="btn-icon" onClick={() => setChatSubView('list')} title="Back to chats">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="15 18 9 12 15 6"/>
-                </svg>
+                <AeroIcon name="back" size={20} />
               </button>
               <span className="sidebar-logo" style={{ flex: 1 }}>{t('inboxTitle')}</span>
               <button
@@ -293,20 +282,10 @@ export default function Sidebar({ mobileHidden }) {
                 {panel === 'chats' && (
                   <>
                     <button className="btn-icon" title="New direct message" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}>
-                      {/* compose / square.and.pencil */}
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.2))' }}>
-                        <path d="M12 4H5a2 2 0 00-2 2v13a2 2 0 002 2h13a2 2 0 002-2v-7"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 013 3L13 14l-4 1 1-4 8.5-8.5z"/>
-                      </svg>
+                      <AeroIcon name="edit" size={18} />
                     </button>
                     <button className="btn-icon" title="New group" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'createGroupOpen' })}>
-                      {/* person.2.badge.plus */}
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.2))' }}>
-                        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-                        <circle cx="9" cy="7" r="4"/>
-                        <line x1="19" y1="8" x2="19" y2="14"/>
-                        <line x1="22" y1="11" x2="16" y2="11"/>
-                      </svg>
+                      <AeroIcon name="groupAdd" size={18} />
                     </button>
                   </>
                 )}
@@ -323,9 +302,7 @@ export default function Sidebar({ mobileHidden }) {
             {/* Search bar */}
             <div className="chat-search-wrap">
               <div className="chat-search-inner">
-                <svg className="chat-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
+                <AeroIcon className="chat-search-icon" name="search" size={15} variant="glyph" />
                 <input
                   className="chat-search"
                   type="text"
@@ -335,9 +312,7 @@ export default function Sidebar({ mobileHidden }) {
                 />
                 {search && (
                   <button className="chat-search-clear" onClick={() => setSearch('')}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
+                    <AeroIcon name="close" size={13} variant="glyph" />
                   </button>
                 )}
               </div>
@@ -352,12 +327,7 @@ export default function Sidebar({ mobileHidden }) {
                 >
                   <div style={{ position: 'relative', flexShrink: 0 }}>
                     <div className="inbox-pinned-avatar">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-                        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-                        <circle cx="9" cy="7" r="4"/>
-                        <line x1="19" y1="8" x2="19" y2="14"/>
-                        <line x1="22" y1="11" x2="16" y2="11"/>
-                      </svg>
+                      <AeroIcon name="groupAdd" size={22} />
                     </div>
                     {inboxCount > 0 && (
                       <span style={{
@@ -449,13 +419,7 @@ export default function Sidebar({ mobileHidden }) {
             title={t('camera')}
           >
             <div className="nav-qr-btn">
-              {/* camera.fill */}
-              <svg width="22" height="22" viewBox="0 0 24 24">
-                <g filter="url(#icon-depth)">
-                  <path d="M12 9a3.75 3.75 0 100 7.5A3.75 3.75 0 0012 9z" fill="#fff" />
-                  <path fillRule="evenodd" d="M9.344 3.071a49.52 49.52 0 015.312 0c.967.052 1.83.585 2.332 1.39l.821 1.317c.24.383.645.643 1.11.71.386.054.77.113 1.152.177 1.432.239 2.429 1.493 2.429 2.909V18a3 3 0 01-3 3h-15a3 3 0 01-3-3V9.574c0-1.416.997-2.67 2.429-2.909.382-.064.766-.123 1.151-.178a1.56 1.56 0 001.11-.71l.822-1.315a2.942 2.942 0 012.332-1.39z" clipRule="evenodd" fill="#fff" />
-                </g>
-              </svg>
+              <AeroIcon name="camera" size={27} variant="glyph" />
             </div>
             {t('camera')}
           </button>
@@ -504,18 +468,5 @@ export default function Sidebar({ mobileHidden }) {
 }
 
 function ChatIcon({ active }) {
-  return active ? (
-    /* bubble.left.fill */
-    <svg width="22" height="22" viewBox="0 0 24 24">
-      <path
-        d="M2 8.5A6.5 6.5 0 018.5 2h7A6.5 6.5 0 0122 8.5v4A6.5 6.5 0 0115.5 19H9l-5 3V8.5z"
-        fill="url(#icon-grad-blue)"
-        filter="url(#icon-depth)"
-      />
-    </svg>
-  ) : (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.2))' }}>
-      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-    </svg>
-  )
+  return <AeroIcon name="chat" size={22} tone={active ? 'blue' : 'slate'} variant={active ? 'tile' : 'glyph'} />
 }

@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react'
 import { sendMessage, sendAttachment } from '../../api.js'
 import { useSocket } from '../../context/SocketContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
+import AeroIcon from '../icons/AeroIcon.jsx'
 
 export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
   const [text, setText] = useState('')
@@ -123,31 +124,26 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
             <span className="reply-preview-name">{replyTo.sender?.username}</span>
             <span className="reply-preview-text">{(replyPreview || '').slice(0, 80)}</span>
           </div>
-          <button className="reply-preview-cancel" onClick={onCancelReply}>✕</button>
+          <button className="reply-preview-cancel" onClick={onCancelReply}>
+            <AeroIcon name="close" size={13} variant="glyph" />
+          </button>
         </div>
       )}
 
       {file && (
         <div className="file-preview-bar">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
+          <AeroIcon name="upload" size={14} variant="glyph" />
           <span className="file-preview-name">{file.name}</span>
-          <button onClick={clearFile} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--primary)', padding:'2px' }}>✕</button>
+          <button onClick={clearFile} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--primary)', padding:'2px' }}>
+            <AeroIcon name="close" size={13} variant="glyph" />
+          </button>
         </div>
       )}
 
       <div className="composer-row">
         <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={(e) => setFile(e.target.files[0] || null)} />
         <button className="btn-icon" type="button" title="Attach file" onClick={() => fileInputRef.current?.click()}>
-          {/* paperclip.fill */}
-          <svg width="20" height="20" viewBox="0 0 24 24">
-            <path
-              d="M16.5 6.5v10.25a4.75 4.75 0 01-9.5 0V5a3.25 3.25 0 016.5 0v9.75a1.75 1.75 0 01-3.5 0V7h-1.5v7.75a3.25 3.25 0 006.5 0V5a4.75 4.75 0 00-9.5 0v11.75a6.25 6.25 0 0012.5 0V6.5h-1.5z"
-              fill="currentColor"
-              filter="url(#icon-depth)"
-            />
-          </svg>
+          <AeroIcon name="attach" size={20} />
         </button>
 
         <div className="composer-textarea-wrap">
@@ -167,26 +163,12 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
             onPointerUp={recording ? stopRecording : undefined}
             title={recording ? t('releaseToSend') : t('holdToRecord')}
           >
-            {/* mic.fill */}
-            <svg width="18" height="18" viewBox="0 0 24 24">
-              <path
-                d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.93V21H9v2h6v-2h-2v-3.07A7 7 0 0019 11h-2z"
-                fill="currentColor"
-                filter="url(#icon-depth)"
-              />
-            </svg>
+            <AeroIcon name="mic" size={18} variant={recording ? 'tile' : 'glyph'} />
           </button>
         </div>
 
         <button className="send-btn" type="button" onClick={send} disabled={busy || (!text.trim() && !file)}>
-          {/* paperplane.fill */}
-          <svg width="20" height="20" viewBox="0 0 24 24">
-            <path
-              d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"
-              fill="#fff"
-              filter="url(#icon-depth)"
-            />
-          </svg>
+          <AeroIcon name="send" size={22} variant="glyph" />
         </button>
       </div>
     </div>

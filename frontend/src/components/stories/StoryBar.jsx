@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import Avatar from '../common/Avatar.jsx'
 import { postStoryWithProgress } from '../../api.js'
+import AeroIcon from '../icons/AeroIcon.jsx'
 
 // SVG circle math for the progress ring
 const RING_R = 23          // radius inside a 52×52 viewBox (center 26,26)
@@ -88,7 +89,9 @@ export default function StoryBar({ onOpenViewer }) {
               )
               : (
                 <div className="avatar-ring-empty">
-                  <div className="avatar avatar-md" style={{ background: 'var(--primary-tint)', color: 'var(--primary)', fontSize: 22, fontWeight: 700 }}>+</div>
+                  <div className="avatar avatar-md" style={{ background: 'var(--primary-tint)', color: 'var(--primary)', fontSize: 22, fontWeight: 700 }}>
+                    <AeroIcon name="story" size={30} />
+                  </div>
                 </div>
               )
             }
@@ -103,7 +106,9 @@ export default function StoryBar({ onOpenViewer }) {
               className="story-add-btn"
               onClick={(e) => { e.stopPropagation(); storyInputRef.current?.click() }}
               title="Add story"
-            >+</button>
+            >
+              <AeroIcon name="add" size={13} variant="glyph" />
+            </button>
           )}
         </div>
         <input

@@ -5,6 +5,7 @@ import { uploadAvatar, removeFriend, openPrivate, updateProfile, changeUsername 
 import SettingsPanel from './SettingsPanel.jsx'
 import AddFriendDialog from '../dialogs/AddFriendDialog.jsx'
 import StoryViewer from '../stories/StoryViewer.jsx'
+import AeroIcon from '../icons/AeroIcon.jsx'
 
 function fmtLastSeen(iso) {
   if (!iso) return 'Never'
@@ -38,10 +39,7 @@ export default function ProfilePanel() {
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
         <div style={{ position: 'absolute', top: 16, left: 8, zIndex: 10 }}>
           <button className="btn-icon" onClick={() => setView('profile')} title="Back">
-            {/* chevron.left */}
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-            </svg>
+            <AeroIcon name="back" size={20} />
           </button>
         </div>
         <SettingsPanel />
@@ -71,14 +69,7 @@ export default function ProfilePanel() {
           title="Settings"
           onClick={() => setView('settings')}
         >
-          {/* gearshape.fill */}
-          <svg width="20" height="20" viewBox="0 0 24 24">
-            <path
-              d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87a.48.48 0 00.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 00-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"
-              fill="currentColor"
-              filter="url(#icon-depth)"
-            />
-          </svg>
+          <AeroIcon name="settings" size={20} />
         </button>
       </div>
 
@@ -118,14 +109,7 @@ export default function ProfilePanel() {
             style={{ flex: 1 }}
             onClick={() => setView('edit')}
           >
-            {/* pencil.fill */}
-            <svg width="14" height="14" viewBox="0 0 24 24">
-              <path
-                d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
-                fill="currentColor"
-                filter="url(#icon-depth)"
-              />
-            </svg>
+            <AeroIcon name="edit" size={14} />
             Edit Profile
           </button>
           <button
@@ -133,14 +117,7 @@ export default function ProfilePanel() {
             style={{ flex: 1 }}
             onClick={() => navigator.clipboard.writeText(me?.id || '').then(() => toast('UUID copied!', 'success'))}
           >
-            {/* doc.on.doc.fill */}
-            <svg width="14" height="14" viewBox="0 0 24 24">
-              <path
-                d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
-                fill="currentColor"
-                filter="url(#icon-depth)"
-              />
-            </svg>
+            <AeroIcon name="copy" size={14} />
             Copy UUID
           </button>
         </div>
@@ -155,14 +132,7 @@ export default function ProfilePanel() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0,
               }}>
-                {/* person.2.fill */}
-                <svg width="20" height="20" viewBox="0 0 24 24">
-                  <path
-                    d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"
-                    fill="currentColor"
-                    filter="url(#icon-depth)"
-                  />
-                </svg>
+                <AeroIcon name="people" size={28} />
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--text)' }}>Friends</div>
@@ -170,10 +140,7 @@ export default function ProfilePanel() {
                   {state.friends.length} {state.friends.length === 1 ? 'friend' : 'friends'}
                 </div>
               </div>
-              {/* chevron.right */}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--text-3)' }}>
-                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
-              </svg>
+              <AeroIcon name="back" size={16} variant="glyph" style={{ color: 'var(--text-3)', transform: 'rotate(180deg)' }} />
             </div>
           </button>
         </div>
@@ -188,23 +155,13 @@ export default function ProfilePanel() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0,
               }}>
-                {/* qrcode */}
-                <svg width="20" height="20" viewBox="0 0 24 24">
-                  <path
-                    d="M3 3h7v7H3V3zm1 1v5h5V4H4zm1 1h3v3H5V5zM3 14h7v7H3v-7zm1 1v5h5v-5H4zm1 1h3v3H5v-3zM14 3h7v7h-7V3zm1 1v5h5V4h-5zm1 1h3v3h-3V5zM14 14h2v2h-2v-2zm3 0h2v2h-2v-2zm-3 3h2v2h-2v-2zm3 0h2v2h-2v-2zm3-3h1v1h-1v-1zm-1 1h1v1h-1v-1zm1 1h1v3h-3v-1h2v-2z"
-                    fill="currentColor"
-                    filter="url(#icon-depth)"
-                  />
-                </svg>
+                <AeroIcon name="qr" size={28} />
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--text)' }}>My QR Code</div>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>Share to add friends</div>
               </div>
-              {/* chevron.right */}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--text-3)' }}>
-                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
-              </svg>
+              <AeroIcon name="back" size={16} variant="glyph" style={{ color: 'var(--text-3)', transform: 'rotate(180deg)' }} />
             </div>
           </button>
         </div>
@@ -225,10 +182,7 @@ function QRView({ onBack, me }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div className="panel-header">
         <button className="btn-icon" onClick={onBack} title="Back">
-          {/* chevron.left */}
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-          </svg>
+          <AeroIcon name="back" size={20} />
         </button>
         <span className="panel-title">My QR Code</span>
       </div>
@@ -317,10 +271,7 @@ function EditProfileView({ onBack }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div className="panel-header">
         <button className="btn-icon" onClick={onBack} title="Back">
-          {/* chevron.left */}
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-          </svg>
+          <AeroIcon name="back" size={20} />
         </button>
         <span className="panel-title">Edit Profile</span>
       </div>
@@ -337,10 +288,7 @@ function EditProfileView({ onBack }) {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               border: '2px solid var(--surface)',
             }}>
-              {/* pencil.fill */}
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-              </svg>
+              <AeroIcon name="edit" size={14} variant="glyph" />
             </div>
           </div>
           <input ref={avatarRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={pickAvatar} />
@@ -453,10 +401,7 @@ function FriendsView({ onBack }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div className="panel-header">
         <button className="btn-icon" onClick={onBack} title="Back">
-          {/* chevron.left */}
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-          </svg>
+          <AeroIcon name="back" size={20} />
         </button>
         <span className="panel-title">Friends</span>
         <button
@@ -487,16 +432,10 @@ function FriendsView({ onBack }) {
             </div>
             <div className="friend-actions">
               <button className="btn-icon" title="Message" onClick={() => openChat(f)}>
-                {/* bubble.left.fill */}
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M2 8.5A6.5 6.5 0 018.5 2h7A6.5 6.5 0 0122 8.5v4A6.5 6.5 0 0115.5 19H9l-5 3V8.5z"/>
-                </svg>
+                <AeroIcon name="chat" size={18} />
               </button>
               <button className="btn-icon" title="Remove" onClick={() => remove(f)} disabled={busy === f.id} style={{ color: '#EF4444' }}>
-                {/* trash.fill */}
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M9 3v1H4v2h1l1 14h12l1-14h1V4h-5V3H9zm0 5h2v9H9V8zm4 0h2v9h-2V8z"/>
-                </svg>
+                <AeroIcon name="trash" size={18} />
               </button>
             </div>
           </div>

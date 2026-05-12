@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
 import { removeFriend, openPrivate } from '../../api.js'
 import AddFriendDialog from '../dialogs/AddFriendDialog.jsx'
+import AeroIcon from '../icons/AeroIcon.jsx'
 
 function fmtLastSeen(iso, t) {
   if (!iso) return t('neverSeen')
@@ -74,24 +75,10 @@ export default function FriendsPanel() {
             </div>
             <div className="friend-actions">
               <button className="btn-icon" title={t('messagePlaceholder')} onClick={() => openChat(f)}>
-                {/* bubble.left.fill */}
-                <svg width="18" height="18" viewBox="0 0 24 24">
-                  <path
-                    d="M2 8.5A6.5 6.5 0 018.5 2h7A6.5 6.5 0 0122 8.5v4A6.5 6.5 0 0115.5 19H9l-5 3V8.5z"
-                    fill="currentColor"
-                    filter="url(#icon-depth)"
-                  />
-                </svg>
+                <AeroIcon name="chat" size={18} />
               </button>
               <button className="btn-icon" onClick={() => remove(f)} style={{ color: '#EF4444' }}>
-                {/* trash.fill */}
-                <svg width="18" height="18" viewBox="0 0 24 24">
-                  <path
-                    d="M9 3v1H4v2h1l1 14h12l1-14h1V4h-5V3H9zm0 5h2v9H9V8zm4 0h2v9h-2V8z"
-                    fill="currentColor"
-                    filter="url(#icon-depth)"
-                  />
-                </svg>
+                <AeroIcon name="trash" size={18} />
               </button>
             </div>
           </div>

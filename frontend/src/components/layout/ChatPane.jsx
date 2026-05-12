@@ -6,6 +6,7 @@ import Avatar from '../common/Avatar.jsx'
 import MessageList from '../messages/MessageList.jsx'
 import Composer from '../messages/Composer.jsx'
 import GroupInfoDialog from '../dialogs/GroupInfoDialog.jsx'
+import AeroIcon from '../icons/AeroIcon.jsx'
 import { leaveConv } from '../../api.js'
 
 function fmtLastSeen(iso) {
@@ -39,9 +40,7 @@ export default function ChatPane() {
       <div className="chat-pane">
         <div className="chat-empty">
           <div className="chat-empty-icon">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-            </svg>
+            <AeroIcon name="chat" size={42} />
           </div>
           <h2>GrayHat</h2>
           <p>{t('selectConversation')}</p>
@@ -82,9 +81,7 @@ export default function ChatPane() {
           className="btn-icon chat-back-btn"
           onClick={() => dispatch({ type: 'CLOSE_CHAT' })}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.2))' }}>
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
+          <AeroIcon name="back" size={20} />
         </button>
 
         {isPrivate
@@ -127,47 +124,19 @@ export default function ChatPane() {
 
         <div className="chat-header-actions">
           <button className="btn-icon" title="Voice call" onClick={handleVoiceCall}>
-            {/* phone.fill */}
-            <svg width="18" height="18" viewBox="0 0 24 24">
-              <path
-                d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.28-.28.67-.36 1.02-.25 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"
-                fill="currentColor"
-                filter="url(#icon-depth)"
-              />
-            </svg>
+            <AeroIcon name="phone" size={18} />
           </button>
           <button className="btn-icon" title="Video call" onClick={handleVideoCall}>
-            {/* video.fill */}
-            <svg width="18" height="18" viewBox="0 0 24 24">
-              <path
-                d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z"
-                fill="currentColor"
-                filter="url(#icon-depth)"
-              />
-            </svg>
+            <AeroIcon name="video" size={18} />
           </button>
           {!isPrivate && (
             <button className="btn-icon" title="Group info" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'groupInfoConvId', value: conv.id })}>
-              {/* info.circle.fill */}
-              <svg width="18" height="18" viewBox="0 0 24 24">
-                <path
-                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"
-                  fill="currentColor"
-                  filter="url(#icon-depth)"
-                />
-              </svg>
+              <AeroIcon name="info" size={18} />
             </button>
           )}
           {isPrivate && (
             <button className="btn-icon" title="Close chat" style={{ color:'#EF4444' }} onClick={handleLeave}>
-              {/* xmark */}
-              <svg width="14" height="14" viewBox="0 0 24 24">
-                <path
-                  d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
-                  fill="currentColor"
-                  filter="url(#icon-depth)"
-                />
-              </svg>
+              <AeroIcon name="close" size={16} />
             </button>
           )}
         </div>

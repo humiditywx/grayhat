@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Avatar from '../common/Avatar.jsx'
 import { editMessage, deleteMessage, reactMessage } from '../../api.js'
+import AeroIcon from '../icons/AeroIcon.jsx'
 
 function fmtTime(iso) {
   if (!iso) return ''
@@ -44,8 +45,8 @@ function VoicePlayer({ url, isMine }) {
     <div className="voice-player">
       <button className="vp-play-btn" onClick={toggle} type="button">
         {playing
-          ? <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
-          : <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>}
+          ? <AeroIcon name="pause" size={15} variant="glyph" />
+          : <AeroIcon name="play" size={15} variant="glyph" />}
       </button>
       <div className="vp-bars">
         {Array.from({ length: BARS }).map((_, i) => (
@@ -76,10 +77,7 @@ function AttachmentView({ att, isMine }) {
   }
   return (
     <a className="msg-file" href={att.url} download={att.name} target="_blank" rel="noreferrer">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/>
-        <polyline points="14,2 14,8 20,8"/>
-      </svg>
+      <AeroIcon name="file" size={28} />
       <div className="msg-file-info">
         <div className="msg-file-name">{att.name}</div>
         <div className="msg-file-size">{fmtSize(att.size_bytes)}</div>
@@ -178,9 +176,7 @@ export default function MessageBubble({ msg, isMine, isGroup, onUpdated, onDelet
               <img src={storyReply.media_url} alt="story" className="msg-story-reply-thumb" />
             )}
             <div className="msg-story-reply-label">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0 }}>
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
+              <AeroIcon name="story" size={13} variant="glyph" />
               Replied to {storyReply.author_username}'s story
             </div>
           </div>
@@ -194,10 +190,7 @@ export default function MessageBubble({ msg, isMine, isGroup, onUpdated, onDelet
               {isDeleted
                 ? (
                   <span className="msg-deleted-body">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ flexShrink: 0 }}>
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-                    </svg>
+                    <AeroIcon name="deleted" size={14} variant="glyph" />
                     Message deleted
                   </span>
                 )
@@ -267,10 +260,5 @@ export default function MessageBubble({ msg, isMine, isGroup, onUpdated, onDelet
 }
 
 function ReadTick({ msg }) {
-  return (
-    <svg className="msg-tick" width="16" height="12" viewBox="0 0 16 12" fill="none">
-      <path d="M1 6l4 4L15 1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M5 6l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
+  return <AeroIcon className={`msg-tick${msg.read_at ? ' read' : ''}`} name="check" size={14} variant="glyph" />
 }

@@ -3,6 +3,7 @@ import Avatar from '../common/Avatar.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
 import { acceptFriendRequest, declineFriendRequest, cancelFriendRequest } from '../../api.js'
+import AeroIcon from '../icons/AeroIcon.jsx'
 
 function fmtTime(iso, t) {
   if (!iso) return ''
@@ -118,18 +119,14 @@ export default function InboxPanel({ hideHeader = false }) {
                     onClick={() => handleDecline(req)}
                     disabled={busy === req.id}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.3))' }}>
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
+                    <AeroIcon name="close" size={15} variant="glyph" />
                   </button>
                   <button
                     className="req-action-accept"
                     onClick={() => handleAccept(req)}
                     disabled={busy === req.id}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.3))' }}>
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
+                    <AeroIcon name="check" size={15} variant="glyph" />
                   </button>
                 </div>
               </div>
@@ -157,9 +154,7 @@ export default function InboxPanel({ hideHeader = false }) {
                   disabled={busy === req.id}
                   style={{ color: 'var(--text-3)', flexShrink: 0 }}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.3))' }}>
-                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
+                  <AeroIcon name="close" size={16} />
                 </button>
               </div>
             ))}
