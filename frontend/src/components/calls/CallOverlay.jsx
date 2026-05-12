@@ -294,46 +294,62 @@ function CallCtrl({ active, onClick, label, icon: Icon }) {
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
 const MicIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-    <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-    <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+  <svg width={size} height={size} viewBox="0 0 24 24">
+    <g filter="url(#icon-depth)">
+      <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" fill="#fff" />
+      <path d="M19 10v2a7 7 0 01-14 0v-2" stroke="#fff" strokeWidth="2" fill="none" />
+      <line x1="12" y1="19" x2="12" y2="23" stroke="#fff" strokeWidth="2" /><line x1="8" y1="23" x2="16" y2="23" stroke="#fff" strokeWidth="2" />
+    </g>
   </svg>
 )
 const MutedIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <line x1="1" y1="1" x2="23" y2="23"/>
-    <path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6"/>
-    <path d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23"/>
-    <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+  <svg width={size} height={size} viewBox="0 0 24 24">
+    <g filter="url(#icon-depth)">
+      <line x1="1" y1="1" x2="23" y2="23" stroke="#fff" strokeWidth="2" />
+      <path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6" stroke="#fff" strokeWidth="2" fill="none" />
+      <path d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23" stroke="#fff" strokeWidth="2" fill="none" />
+      <line x1="12" y1="19" x2="12" y2="23" stroke="#fff" strokeWidth="2" /><line x1="8" y1="23" x2="16" y2="23" stroke="#fff" strokeWidth="2" />
+    </g>
   </svg>
 )
 const CamIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polygon points="23 7 16 12 23 17 23 7"/>
-    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+  <svg width={size} height={size} viewBox="0 0 24 24">
+    <g filter="url(#icon-depth)">
+      <polygon points="23 7 16 12 23 17 23 7" fill="#fff" />
+      <rect x="1" y="5" width="15" height="14" rx="2" ry="2" fill="#fff" />
+    </g>
   </svg>
 )
 const ShareIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="2" y="3" width="20" height="14" rx="2"/>
-    <path d="M8 21h8M12 17v4"/>
+  <svg width={size} height={size} viewBox="0 0 24 24">
+    <g filter="url(#icon-depth)">
+      <rect x="2" y="3" width="20" height="14" rx="2" fill="#fff" />
+      <path d="M8 21h8M12 17v4" stroke="#fff" strokeWidth="2" fill="none" />
+    </g>
   </svg>
 )
 const SpeakerOnIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-    <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/>
+  <svg width={size} height={size} viewBox="0 0 24 24">
+    <g filter="url(#icon-depth)">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="#fff" />
+      <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="#fff" strokeWidth="2" fill="none" />
+    </g>
   </svg>
 )
 const SpeakerOffIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-    <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+  <svg width={size} height={size} viewBox="0 0 24 24">
+    <g filter="url(#icon-depth)">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="#fff" />
+      <line x1="23" y1="9" x2="17" y2="15" stroke="#fff" strokeWidth="2" /><line x1="17" y1="9" x2="23" y2="15" stroke="#fff" strokeWidth="2" />
+    </g>
   </svg>
 )
 const HangupIcon = ({ size }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02L6.6 10.8z"/>
+  <svg width={size} height={size} viewBox="0 0 24 24">
+    <path
+      d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02L6.6 10.8z"
+      fill="url(#icon-grad-red)"
+      filter="url(#icon-depth)"
+    />
   </svg>
 )

@@ -74,13 +74,23 @@ export default function FriendsPanel() {
             </div>
             <div className="friend-actions">
               <button className="btn-icon" title={t('messagePlaceholder')} onClick={() => openChat(f)}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                {/* bubble.left.fill */}
+                <svg width="18" height="18" viewBox="0 0 24 24">
+                  <path
+                    d="M2 8.5A6.5 6.5 0 018.5 2h7A6.5 6.5 0 0122 8.5v4A6.5 6.5 0 0115.5 19H9l-5 3V8.5z"
+                    fill="currentColor"
+                    filter="url(#icon-depth)"
+                  />
                 </svg>
               </button>
               <button className="btn-icon" onClick={() => remove(f)} style={{ color: '#EF4444' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                {/* trash.fill */}
+                <svg width="18" height="18" viewBox="0 0 24 24">
+                  <path
+                    d="M9 3v1H4v2h1l1 14h12l1-14h1V4h-5V3H9zm0 5h2v9H9V8zm4 0h2v9h-2V8z"
+                    fill="currentColor"
+                    filter="url(#icon-depth)"
+                  />
                 </svg>
               </button>
             </div>

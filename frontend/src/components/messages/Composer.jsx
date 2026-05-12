@@ -140,8 +140,13 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
       <div className="composer-row">
         <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={(e) => setFile(e.target.files[0] || null)} />
         <button className="btn-icon" type="button" title="Attach file" onClick={() => fileInputRef.current?.click()}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+          {/* paperclip.fill */}
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <path
+              d="M16.5 6.5v10.25a4.75 4.75 0 01-9.5 0V5a3.25 3.25 0 016.5 0v9.75a1.75 1.75 0 01-3.5 0V7h-1.5v7.75a3.25 3.25 0 006.5 0V5a4.75 4.75 0 00-9.5 0v11.75a6.25 6.25 0 0012.5 0V6.5h-1.5z"
+              fill="currentColor"
+              filter="url(#icon-depth)"
+            />
           </svg>
         </button>
 
@@ -162,19 +167,25 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
             onPointerUp={recording ? stopRecording : undefined}
             title={recording ? t('releaseToSend') : t('holdToRecord')}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-              <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/>
-              <line x1="8" y1="23" x2="16" y2="23"/>
+            {/* mic.fill */}
+            <svg width="18" height="18" viewBox="0 0 24 24">
+              <path
+                d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.93V21H9v2h6v-2h-2v-3.07A7 7 0 0019 11h-2z"
+                fill="currentColor"
+                filter="url(#icon-depth)"
+              />
             </svg>
           </button>
         </div>
 
         <button className="send-btn" type="button" onClick={send} disabled={busy || (!text.trim() && !file)}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="22" y1="2" x2="11" y2="13"/>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          {/* paperplane.fill */}
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <path
+              d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"
+              fill="#fff"
+              filter="url(#icon-depth)"
+            />
           </svg>
         </button>
       </div>

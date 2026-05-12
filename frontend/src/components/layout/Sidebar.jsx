@@ -293,16 +293,17 @@ export default function Sidebar({ mobileHidden }) {
                 {panel === 'chats' && (
                   <>
                     <button className="btn-icon" title="New direct message" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'addFriendOpen' })}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                      {/* compose / square.and.pencil */}
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.2))' }}>
+                        <path d="M12 4H5a2 2 0 00-2 2v13a2 2 0 002 2h13a2 2 0 002-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 013 3L13 14l-4 1 1-4 8.5-8.5z"/>
                       </svg>
                     </button>
                     <button className="btn-icon" title="New group" onClick={() => dispatch({ type: 'OPEN_DIALOG', key: 'createGroupOpen' })}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      {/* person.2.badge.plus */}
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.2))' }}>
                         <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
                         <circle cx="9" cy="7" r="4"/>
-                        <path d="M23 21v-2a4 4 0 00-3-3.87"/>
-                        <path d="M16 3.13a4 4 0 010 7.75"/>
                         <line x1="19" y1="8" x2="19" y2="14"/>
                         <line x1="22" y1="11" x2="16" y2="11"/>
                       </svg>
@@ -437,7 +438,7 @@ export default function Sidebar({ mobileHidden }) {
         {/* Bottom nav — Chats | [Camera] | Profile */}
         <nav className="sidebar-nav">
           <button className={`nav-tab${panel === 'chats' ? ' active' : ''}`} onClick={goToChats}>
-            <ChatIcon active={panel === 'chats'} />
+            <span className="nav-icon"><ChatIcon active={panel === 'chats'} /></span>
             {t('chats')}
           </button>
 
@@ -448,9 +449,12 @@ export default function Sidebar({ mobileHidden }) {
             title={t('camera')}
           >
             <div className="nav-qr-btn">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
-                <circle cx="12" cy="13" r="4"/>
+              {/* camera.fill */}
+              <svg width="22" height="22" viewBox="0 0 24 24">
+                <g filter="url(#icon-depth)">
+                  <path d="M12 9a3.75 3.75 0 100 7.5A3.75 3.75 0 0012 9z" fill="#fff" />
+                  <path fillRule="evenodd" d="M9.344 3.071a49.52 49.52 0 015.312 0c.967.052 1.83.585 2.332 1.39l.821 1.317c.24.383.645.643 1.11.71.386.054.77.113 1.152.177 1.432.239 2.429 1.493 2.429 2.909V18a3 3 0 01-3 3h-15a3 3 0 01-3-3V9.574c0-1.416.997-2.67 2.429-2.909.382-.064.766-.123 1.151-.178a1.56 1.56 0 001.11-.71l.822-1.315a2.942 2.942 0 012.332-1.39z" clipRule="evenodd" fill="#fff" />
+                </g>
               </svg>
             </div>
             {t('camera')}
@@ -465,9 +469,11 @@ export default function Sidebar({ mobileHidden }) {
           />
 
           <button className={`nav-tab${panel === 'profile' ? ' active' : ''}`} onClick={() => dispatch({ type: 'SET_PANEL', panel: 'profile' })}>
-            <div className={`nav-avatar-wrap${panel === 'profile' ? ' active' : ''}`}>
-              <Avatar user={state.me} size="xs" />
-            </div>
+            <span className="nav-icon">
+              <div className={`nav-avatar-wrap${panel === 'profile' ? ' active' : ''}`}>
+                <Avatar user={state.me} size="xs" />
+              </div>
+            </span>
             {t('profile')}
           </button>
         </nav>
@@ -498,8 +504,17 @@ export default function Sidebar({ mobileHidden }) {
 }
 
 function ChatIcon({ active }) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+  return active ? (
+    /* bubble.left.fill */
+    <svg width="22" height="22" viewBox="0 0 24 24">
+      <path
+        d="M2 8.5A6.5 6.5 0 018.5 2h7A6.5 6.5 0 0122 8.5v4A6.5 6.5 0 0115.5 19H9l-5 3V8.5z"
+        fill="url(#icon-grad-blue)"
+        filter="url(#icon-depth)"
+      />
+    </svg>
+  ) : (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.2))' }}>
       <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
     </svg>
   )

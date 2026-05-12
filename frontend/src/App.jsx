@@ -112,6 +112,7 @@ function AppInner() {
 
   return (
     <div className="app-shell" style={{ height: '100dvh', position: 'relative' }}>
+      <SkeumorphicFilters />
       <MessageNotificationBanner />
       <FriendRequestBanner />
       <Sidebar mobileHidden={sidebarHidden} />
@@ -120,6 +121,60 @@ function AppInner() {
       <CallOverlay />
       <UserProfilePage />
     </div>
+  )
+}
+
+function SkeumorphicFilters() {
+  return (
+    <svg width="0" height="0" style={{ position: 'absolute' }}>
+      <defs>
+        {/* Subtle inner shadow for a "carved" look */}
+        <filter id="inner-shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="1.5" result="blur" />
+          <feOffset dy="1.5" dx="1" />
+          <feComposite in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1" result="shadow" />
+          <feFlood floodColor="black" floodOpacity="0.4" />
+          <feComposite in2="shadow" operator="in" />
+          <feComposite in2="SourceGraphic" operator="over" />
+        </filter>
+
+        {/* Glossy overlay gradient */}
+        <linearGradient id="glossy-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="white" stopOpacity="0.5" />
+          <stop offset="50%" stopColor="white" stopOpacity="0.1" />
+          <stop offset="51%" stopColor="white" stopOpacity="0" />
+          <stop offset="100%" stopColor="white" stopOpacity="0.1" />
+        </linearGradient>
+
+        {/* Skeumorphic icon gradient (Blue) */}
+        <linearGradient id="icon-grad-blue" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#60A5FA" />
+          <stop offset="100%" stopColor="#2563EB" />
+        </linearGradient>
+
+        {/* Skeumorphic icon gradient (Red) */}
+        <linearGradient id="icon-grad-red" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#F87171" />
+          <stop offset="100%" stopColor="#DC2626" />
+        </linearGradient>
+
+        {/* Skeumorphic icon gradient (Green) */}
+        <linearGradient id="icon-grad-green" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#4ADE80" />
+          <stop offset="100%" stopColor="#16A34A" />
+        </linearGradient>
+
+        {/* Generic depth filter */}
+        <filter id="icon-depth" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="1" stdDeviation="1" floodOpacity="0.3" />
+          <feSpecularLighting surfaceScale="2" specularConstant="0.8" specularExponent="20" lightingColor="#white" in="SourceGraphic" result="specOut">
+            <fePointLight x="-5000" y="-10000" z="20000" />
+          </feSpecularLighting>
+          <feComposite in="specOut" in2="SourceAlpha" operator="in" result="specOut" />
+          <feComposite in="SourceGraphic" in2="specOut" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" />
+        </filter>
+      </defs>
+    </svg>
   )
 }
 

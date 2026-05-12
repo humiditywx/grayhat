@@ -164,7 +164,7 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
         </div>
         {isOwn && (
           <button className="story-close-btn" onClick={doDelete} title="Delete story">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.3))' }}>
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
             </svg>
           </button>
@@ -206,7 +206,7 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
           onClick={() => setViewersOpen(true)}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.3))' }}>
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
             <circle cx="12" cy="12" r="3"/>
           </svg>
@@ -230,7 +230,7 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
             onBlur={() => { if (!reply) pausedRef.current = false }}
           />
           <button className="btn-icon-primary" onClick={doReply} onPointerDown={(e) => e.stopPropagation()}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.3))' }}>
               <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
             </svg>
           </button>
