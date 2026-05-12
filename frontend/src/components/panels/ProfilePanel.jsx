@@ -140,7 +140,7 @@ export default function ProfilePanel() {
                   {state.friends.length} {state.friends.length === 1 ? 'friend' : 'friends'}
                 </div>
               </div>
-              <AeroIcon name="back" size={16} variant="glyph" style={{ color: 'var(--text-3)', transform: 'rotate(180deg)' }} />
+              <AeroIcon name="back" size={16} style={{ color: 'var(--text-3)', transform: 'rotate(180deg)' }} />
             </div>
           </button>
         </div>
@@ -161,7 +161,7 @@ export default function ProfilePanel() {
                 <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--text)' }}>My QR Code</div>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-3)' }}>Share to add friends</div>
               </div>
-              <AeroIcon name="back" size={16} variant="glyph" style={{ color: 'var(--text-3)', transform: 'rotate(180deg)' }} />
+              <AeroIcon name="back" size={16} style={{ color: 'var(--text-3)', transform: 'rotate(180deg)' }} />
             </div>
           </button>
         </div>
@@ -288,7 +288,7 @@ function EditProfileView({ onBack }) {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               border: '2px solid var(--surface)',
             }}>
-              <AeroIcon name="edit" size={14} variant="glyph" />
+              <AeroIcon name="edit" size={14} />
             </div>
           </div>
           <input ref={avatarRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={pickAvatar} />

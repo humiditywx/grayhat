@@ -45,8 +45,8 @@ function VoicePlayer({ url, isMine }) {
     <div className="voice-player">
       <button className="vp-play-btn" onClick={toggle} type="button">
         {playing
-          ? <AeroIcon name="pause" size={15} variant="glyph" />
-          : <AeroIcon name="play" size={15} variant="glyph" />}
+          ? <AeroIcon name="pause" size={15} />
+          : <AeroIcon name="play" size={15} />}
       </button>
       <div className="vp-bars">
         {Array.from({ length: BARS }).map((_, i) => (
@@ -176,7 +176,7 @@ export default function MessageBubble({ msg, isMine, isGroup, onUpdated, onDelet
               <img src={storyReply.media_url} alt="story" className="msg-story-reply-thumb" />
             )}
             <div className="msg-story-reply-label">
-              <AeroIcon name="story" size={13} variant="glyph" />
+              <AeroIcon name="story" size={13} />
               Replied to {storyReply.author_username}'s story
             </div>
           </div>
@@ -190,7 +190,7 @@ export default function MessageBubble({ msg, isMine, isGroup, onUpdated, onDelet
               {isDeleted
                 ? (
                   <span className="msg-deleted-body">
-                    <AeroIcon name="deleted" size={14} variant="glyph" />
+                    <AeroIcon name="deleted" size={14} />
                     Message deleted
                   </span>
                 )
@@ -260,5 +260,5 @@ export default function MessageBubble({ msg, isMine, isGroup, onUpdated, onDelet
 }
 
 function ReadTick({ msg }) {
-  return <AeroIcon className={`msg-tick${msg.read_at ? ' read' : ''}`} name="check" size={14} variant="glyph" />
+  return <AeroIcon className={`msg-tick${msg.read_at ? ' read' : ''}`} name="check" size={14} />
 }

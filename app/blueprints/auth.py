@@ -37,7 +37,19 @@ from ..services.mail import send_otp_email
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
 
-def _issue_auth_response(user: User, status_code: int = 200):
+def _issue_auth_response(user: User, status_code: int = 200, ignore_mfa: bool = False):
+    if user.totp_enabled and not ignore_mfa:
+        mfa_token = create_access_token(
+            identity=user.id,
+            additional_claims={'purpose': 'mfa_verification', 'tv': user.token_version or 0},
+            expires_delta=timedelta(minutes=5)
+        )
+        return jsonify({
+            'ok': True,
+            'mfa_required': True,
+            'mfa_token': mfa_token
+        }), 200
+
     response = jsonify({
         'ok': True,
         'user': serialize_user(user),
@@ -283,6 +295,49 @@ def totp_confirm():
     return jsonify({'ok': True, 'user': serialize_user(current_user)})
 
 
+@auth_bp.post('/totp/verify-login')
+@jwt_required()
+def totp_verify_login():
+    claims = get_jwt()
+    if claims.get('purpose') != 'mfa_verification':
+        return jsonify({'ok': False, 'error': 'Invalid MFA session.'}), 403
+
+    payload = request.get_json(silent=True) or {}
+    code = str(payload.get('code', '')).strip()
+
+    if not current_user.totp_enabled or not current_user.totp_secret_encrypted:
+        return jsonify({'ok': False, 'error': '2FA is not enabled for this account.'}), 400
+
+    from ..services.security import decrypt_secret
+    secret = decrypt_secret(current_user.totp_secret_encrypted)
+    
+    if secret and verify_totp(secret, code):
+        current_user.totp_attempts = 0
+        db.session.commit()
+        return _issue_auth_response(current_user, ignore_mfa=True)
+    
+    # Invalid code
+    current_user.totp_attempts += 1
+    remaining = 3 - current_user.totp_attempts
+    
+    if current_user.totp_attempts >= 3:
+        current_user.totp_attempts = 0
+        # Revoke the MFA token by incrementing token version
+        current_user.token_version += 1
+        db.session.commit()
+        return jsonify({
+            'ok': False, 
+            'error': 'Too many failed attempts. Your session has been revoked. Please login again.',
+            'revoked': True
+        }), 401
+    
+    db.session.commit()
+    return jsonify({
+        'ok': False, 
+        'error': f'Invalid authentication code. {remaining} attempts remaining.'
+    }), 400
+
+
 @auth_bp.post('/password-reset')
 @limiter.limit('20 per hour')
 def password_reset():
@@ -311,7 +366,7 @@ def password_reset():
     user.password_hash = hash_password(new_password)
     user.token_version += 1
     db.session.commit()
-    return _issue_auth_response(user)
+    return _issue_auth_response(user, ignore_mfa=True)
 
 
 @auth_bp.post('/password-change')
@@ -327,4 +382,4 @@ def password_change():
     current_user.password_hash = hash_password(new_password)
     current_user.token_version += 1
     db.session.commit()
-    return _issue_auth_response(current_user)
+    return _issue_auth_response(current_user, ignore_mfa=True)

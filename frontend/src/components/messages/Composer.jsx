@@ -125,17 +125,17 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
             <span className="reply-preview-text">{(replyPreview || '').slice(0, 80)}</span>
           </div>
           <button className="reply-preview-cancel" onClick={onCancelReply}>
-            <AeroIcon name="close" size={13} variant="glyph" />
+            <AeroIcon name="close" size={13} />
           </button>
         </div>
       )}
 
       {file && (
         <div className="file-preview-bar">
-          <AeroIcon name="upload" size={14} variant="glyph" />
+          <AeroIcon name="upload" size={14} />
           <span className="file-preview-name">{file.name}</span>
           <button onClick={clearFile} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--primary)', padding:'2px' }}>
-            <AeroIcon name="close" size={13} variant="glyph" />
+            <AeroIcon name="close" size={13} />
           </button>
         </div>
       )}
@@ -163,12 +163,12 @@ export default function Composer({ convId, replyTo, onCancelReply, onSent }) {
             onPointerUp={recording ? stopRecording : undefined}
             title={recording ? t('releaseToSend') : t('holdToRecord')}
           >
-            <AeroIcon name="mic" size={18} variant={recording ? 'tile' : 'glyph'} />
+            <AeroIcon name="mic" size={18} />
           </button>
         </div>
 
         <button className="send-btn" type="button" onClick={send} disabled={busy || (!text.trim() && !file)}>
-          <AeroIcon name="send" size={22} variant="glyph" />
+          <AeroIcon name="send" size={22} />
         </button>
       </div>
     </div>

@@ -174,7 +174,7 @@ function CameraActionModal({ file, onClose, dispatch, toast, conversations }) {
               style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}
               onClick={() => setView('options')}
             >
-              <AeroIcon name="back" size={14} variant="glyph" />
+              <AeroIcon name="back" size={14} />
               Back
             </button>
             <div className="send-picker">
@@ -302,7 +302,7 @@ export default function Sidebar({ mobileHidden }) {
             {/* Search bar */}
             <div className="chat-search-wrap">
               <div className="chat-search-inner">
-                <AeroIcon className="chat-search-icon" name="search" size={15} variant="glyph" />
+                <AeroIcon className="chat-search-icon" name="search" size={15} />
                 <input
                   className="chat-search"
                   type="text"
@@ -312,7 +312,7 @@ export default function Sidebar({ mobileHidden }) {
                 />
                 {search && (
                   <button className="chat-search-clear" onClick={() => setSearch('')}>
-                    <AeroIcon name="close" size={13} variant="glyph" />
+                    <AeroIcon name="close" size={13} />
                   </button>
                 )}
               </div>
@@ -419,7 +419,7 @@ export default function Sidebar({ mobileHidden }) {
             title={t('camera')}
           >
             <div className="nav-qr-btn">
-              <AeroIcon name="camera" size={27} variant="glyph" />
+              <AeroIcon name="camera" size={27} />
             </div>
             {t('camera')}
           </button>
@@ -468,5 +468,5 @@ export default function Sidebar({ mobileHidden }) {
 }
 
 function ChatIcon({ active }) {
-  return <AeroIcon name="chat" size={22} tone={active ? 'blue' : 'slate'} variant={active ? 'tile' : 'glyph'} />
+  return <AeroIcon name="chat" size={22} />
 }

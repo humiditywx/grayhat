@@ -107,7 +107,7 @@ export default function StoryBar({ onOpenViewer }) {
               onClick={(e) => { e.stopPropagation(); storyInputRef.current?.click() }}
               title="Add story"
             >
-              <AeroIcon name="add" size={13} variant="glyph" />
+              <AeroIcon name="add" size={13} />
             </button>
           )}
         </div>

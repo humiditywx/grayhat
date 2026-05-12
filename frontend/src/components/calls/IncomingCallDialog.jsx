@@ -39,13 +39,13 @@ export default function IncomingCallDialog() {
         <div className="incoming-call-actions">
           <button className="call-action-btn" onClick={decline}>
             <div className="call-decline-btn">
-              <AeroIcon name="close" size={26} variant="glyph" />
+              <AeroIcon name="close" size={26} />
             </div>
             <span>Decline</span>
           </button>
           <button className="call-action-btn" onClick={answer}>
             <div className="call-answer-btn">
-              <AeroIcon name="phone" size={26} variant="glyph" />
+              <AeroIcon name="phone" size={26} />
             </div>
             <span>Answer</span>
           </button>

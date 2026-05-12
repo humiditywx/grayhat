@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useLocale } from '../../i18n/index.jsx'
-import { sendOtp, verifyOtp, completeRegister, totpSetup, totpConfirm, authLogin, setupPassword } from '../../api.js'
+import { sendOtp, verifyOtp, completeRegister, totpSetup, totpConfirm, authLogin, setupPassword, verifyTotpLogin } from '../../api.js'
 import PasswordRequirements, { isPasswordValid } from '../common/PasswordRequirements.jsx'
 
 export default function AuthPage() {
   const { dispatch, toast } = useApp()
   const { t } = useLocale()
-  const [step, setStep] = useState('email') // email, otp, register, totp, global, password_setup
+  const [step, setStep] = useState('email') // email, otp, register, totp, global, password_setup, totp_login
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [regToken, setRegToken] = useState('')
+  const [mfaToken, setMfaToken] = useState('')
   const [regForm, setRegForm] = useState({ username: '', display_name: '', password: '', is_global: false })
   const [totpData, setTotpData] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -22,7 +23,12 @@ export default function AuthPage() {
       if (password) {
         // Try password login
         const data = await authLogin({ email, password })
-        dispatch({ type: 'SET_ME', me: data.user, requiresTotpSetup: data.requires_totp_setup })
+        if (data.mfa_required) {
+          setMfaToken(data.mfa_token)
+          setStep('totp_login')
+        } else {
+          dispatch({ type: 'SET_ME', me: data.user, requiresTotpSetup: data.requires_totp_setup })
+        }
       } else {
         // Fallback to OTP
         await sendOtp(email)
@@ -40,7 +46,10 @@ export default function AuthPage() {
     setBusy(true)
     try {
       const data = await verifyOtp(email, code)
-      if (data.user) {
+      if (data.mfa_required) {
+        setMfaToken(data.mfa_token)
+        setStep('totp_login')
+      } else if (data.user) {
         dispatch({ type: 'SET_ME', me: data.user, requiresTotpSetup: data.requires_totp_setup })
       } else if (data.needs_password) {
         setRegToken(data.password_setup_token)
@@ -51,6 +60,22 @@ export default function AuthPage() {
       }
     } catch (err) {
       toast(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onTotpLoginSubmit = async (code) => {
+    setBusy(true)
+    try {
+      const data = await verifyTotpLogin(code, mfaToken)
+      dispatch({ type: 'SET_ME', me: data.user, requiresTotpSetup: data.requires_totp_setup })
+    } catch (err) {
+      toast(err.message, 'error')
+      if (err.message.includes('revoked')) {
+        setStep('email')
+        setPassword('')
+      }
     } finally {
       setBusy(false)
     }
@@ -105,6 +130,27 @@ export default function AuthPage() {
 
         {step === 'otp' && (
           <OtpForm onSubmit={onOtpSubmit} busy={busy} t={t} onBack={() => setStep('email')} />
+        )}
+
+        {step === 'totp_login' && (
+          <form className="auth-form" onSubmit={(e) => { e.preventDefault(); onTotpLoginSubmit(e.target.totp_code.value) }}>
+            <div className="auth-tagline">2-Factor Authentication</div>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)', textAlign: 'center', marginBottom: '20px' }}>
+              Enter the 6-digit code from your authenticator app.
+            </p>
+            <input
+              name="totp_code"
+              className="field-input otp-input"
+              maxLength={6}
+              autoFocus
+              placeholder="000000"
+              required
+            />
+            <button className="btn btn-primary" disabled={busy}>
+              {busy ? 'Verifying...' : 'Verify'}
+            </button>
+            <button type="button" className="btn btn-link" onClick={() => { setStep('email'); setPassword('') }}>Back to Login</button>
+          </form>
         )}
 
         {step === 'password_setup' && (

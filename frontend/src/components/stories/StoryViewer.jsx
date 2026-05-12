@@ -169,7 +169,7 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
           </button>
         )}
         <button className="story-close-btn" onClick={triggerClose}>
-          <AeroIcon name="close" size={18} variant="glyph" />
+          <AeroIcon name="close" size={18} />
         </button>
       </div>
 
@@ -207,7 +207,7 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
           onClick={() => setViewersOpen(true)}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <AeroIcon name="eye" size={22} variant="glyph" />
+          <AeroIcon name="eye" size={22} />
           <span className="story-view-count-label">
             {viewers === null ? '…' : viewers.length}
           </span>
@@ -228,7 +228,7 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
             onBlur={() => { if (!reply) pausedRef.current = false }}
           />
           <button className="btn-icon-primary" onClick={doReply} onPointerDown={(e) => e.stopPropagation()}>
-            <AeroIcon name="send" size={20} variant="glyph" />
+            <AeroIcon name="send" size={20} />
           </button>
         </div>
       )}
@@ -241,7 +241,7 @@ export default function StoryViewer({ initialGroupIndex, onClose }) {
             <div className="story-viewers-header">
               <span>Viewers · {viewers?.length ?? 0}</span>
               <button className="story-close-btn" onClick={() => setViewersOpen(false)}>
-                <AeroIcon name="close" size={18} variant="glyph" />
+                <AeroIcon name="close" size={18} />
               </button>
             </div>
             <div className="story-viewers-list">

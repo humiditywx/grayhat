@@ -78,7 +78,7 @@ export default function FriendRequestBanner() {
           disabled={busy}
           title="Decline"
         >
-          <AeroIcon name="close" size={15} variant="glyph" />
+          <AeroIcon name="close" size={15} />
         </button>
         <button
           className="req-action-accept"
@@ -86,7 +86,7 @@ export default function FriendRequestBanner() {
           disabled={busy}
           title="Accept"
         >
-          <AeroIcon name="check" size={15} variant="glyph" />
+          <AeroIcon name="check" size={15} />
         </button>
       </div>
     </div>

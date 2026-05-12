@@ -52,7 +52,7 @@ export default function SettingsPanel() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               border: '2px solid #fff'
             }}>
-              <AeroIcon name="edit" size={15} variant="glyph" />
+              <AeroIcon name="edit" size={15} />
             </div>
           </div>
           <input ref={avatarRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={pickAvatar} />

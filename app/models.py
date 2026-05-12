@@ -28,6 +28,7 @@ class User(db.Model, TimestampMixin):
     password_hash = db.Column(db.String(512), nullable=True)
     totp_secret_encrypted = db.Column(db.Text, nullable=True)
     totp_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    totp_attempts = db.Column(db.Integer, nullable=False, default=0)
     is_global = db.Column(db.Boolean, nullable=False, default=False)
     recovery_codes = db.Column(db.JSON, nullable=False, default=list)
     token_version = db.Column(db.Integer, nullable=False, default=0)

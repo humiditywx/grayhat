@@ -96,6 +96,8 @@ def _run_column_migrations(app: Flask) -> None:
             stmts = []
             if 'username_changed_at' not in existing_cols:
                 stmts.append("ALTER TABLE users ADD COLUMN username_changed_at JSON NOT NULL DEFAULT '[]'")
+            if 'totp_attempts' not in existing_cols:
+                stmts.append("ALTER TABLE users ADD COLUMN totp_attempts INTEGER NOT NULL DEFAULT 0")
             # Indexes added after initial deploy — CREATE INDEX IF NOT EXISTS is idempotent
             stmts += [
                 "CREATE INDEX IF NOT EXISTS ix_cp_conversation ON conversation_participants (conversation_id)",

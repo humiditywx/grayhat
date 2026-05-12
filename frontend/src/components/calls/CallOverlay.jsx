@@ -297,10 +297,10 @@ function CallCtrl({ active, onClick, label, icon: Icon }) {
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
-const MicIcon = ({ size }) => <AeroIcon name="mic" size={size} variant="glyph" />
-const MutedIcon = ({ size }) => <AeroIcon name="micMuted" size={size} variant="glyph" />
-const CamIcon = ({ size }) => <AeroIcon name="video" size={size} variant="glyph" />
-const ShareIcon = ({ size }) => <AeroIcon name="share" size={size} variant="glyph" />
-const SpeakerOnIcon = ({ size }) => <AeroIcon name="speaker" size={size} variant="glyph" />
-const SpeakerOffIcon = ({ size }) => <AeroIcon name="speakerOff" size={size} variant="glyph" />
-const HangupIcon = ({ size }) => <AeroIcon name="hangup" size={size} variant="glyph" />
+const MicIcon = ({ size }) => <AeroIcon name="mic" size={size} />
+const MutedIcon = ({ size }) => <AeroIcon name="micMuted" size={size} />
+const CamIcon = ({ size }) => <AeroIcon name="video" size={size} />
+const ShareIcon = ({ size }) => <AeroIcon name="share" size={size} />
+const SpeakerOnIcon = ({ size }) => <AeroIcon name="speaker" size={size} />
+const SpeakerOffIcon = ({ size }) => <AeroIcon name="speakerOff" size={size} />
+const HangupIcon = ({ size }) => <AeroIcon name="hangup" size={size} />

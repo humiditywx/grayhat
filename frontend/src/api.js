@@ -48,6 +48,11 @@ export const setupPassword    = (b, token) => request('/api/auth/password/setup'
 export const authLogout       = () => post('/api/auth/logout', {})
 export const totpSetup     = () => post('/api/auth/totp/setup', {})
 export const totpConfirm   = (code) => post('/api/auth/totp/confirm', { code })
+export const verifyTotpLogin = (code, token) => request('/api/auth/totp/verify-login', {
+  method: 'POST',
+  body: JSON.stringify({ code }),
+  headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+})
 export const passwordReset = (b) => post('/api/auth/password-reset', b)
 export const passwordChange= (b) => post('/api/auth/password-change', b)
 

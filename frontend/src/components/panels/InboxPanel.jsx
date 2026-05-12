@@ -119,14 +119,14 @@ export default function InboxPanel({ hideHeader = false }) {
                     onClick={() => handleDecline(req)}
                     disabled={busy === req.id}
                   >
-                    <AeroIcon name="close" size={15} variant="glyph" />
+                    <AeroIcon name="close" size={15} />
                   </button>
                   <button
                     className="req-action-accept"
                     onClick={() => handleAccept(req)}
                     disabled={busy === req.id}
                   >
-                    <AeroIcon name="check" size={15} variant="glyph" />
+                    <AeroIcon name="check" size={15} />
                   </button>
                 </div>
               </div>
