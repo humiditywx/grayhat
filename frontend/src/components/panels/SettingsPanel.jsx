@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import Avatar from '../common/Avatar.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { useLocale, SUPPORTED_LOCALES } from '../../i18n/index.jsx'
-import { uploadAvatar, passwordChange, authLogout, totpSetup, totpConfirm } from '../../api.js'
+import { uploadAvatar, passwordChange, authLogout, totpSetup, totpConfirm, totpDisable } from '../../api.js'
 import { useTheme } from '../../hooks/useTheme.js'
 import PasswordRequirements, { isPasswordValid } from '../common/PasswordRequirements.jsx'
 import AeroIcon from '../icons/AeroIcon.jsx'
@@ -203,7 +203,8 @@ function TotpSection({ toast, t }) {
   const [data, setData] = useState(null)
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
-  const { dispatch } = useApp()
+  const { state, dispatch } = useApp()
+  const { me } = state
 
   const setup = async () => {
     setBusy(true)
@@ -220,6 +221,27 @@ function TotpSection({ toast, t }) {
       setData(null)
     } catch (err) { toast(err.message, 'error') }
     setBusy(false)
+  }
+
+  const disable = async () => {
+    if (!confirm(t('disableTwoFaConfirm'))) return
+    setBusy(true)
+    try {
+      const res = await totpDisable()
+      dispatch({ type: 'SET_ME', me: res.user, requiresTotpSetup: true })
+      toast(t('twoFaDisabled'), 'success')
+    } catch (err) { toast(err.message, 'error') }
+    setBusy(false)
+  }
+
+  if (me?.totp_enabled) {
+    return (
+      <div style={{ padding: '8px 0 12px' }}>
+        <button className="btn btn-danger btn-sm" onClick={disable} disabled={busy}>
+          {busy ? t('loadingDots') : t('disableTwoFa')}
+        </button>
+      </div>
+    )
   }
 
   if (!data) {

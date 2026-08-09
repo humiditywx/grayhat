@@ -18,8 +18,8 @@ info:
     it manually.
 
     ### Rate limits
-    - `POST /api/auth/otp/send` → 3 / 15 minutes
-    - `POST /api/auth/password-reset` → 20 / hour
+    - `POST /api/auth/otp/send` -> 3 / 15 minutes
+    - `POST /api/auth/password-reset` -> 20 / hour
   version: "1.0.0"
   contact:
     name: GrayHat
@@ -34,7 +34,7 @@ tags:
   - name: bootstrap
     description: Load the complete initial application state in one request.
   - name: friends
-    description: Manage the friend list — send requests, accept, decline, cancel, and unfriend.
+    description: "Manage the friend list: send requests, accept, decline, cancel, and unfriend."
   - name: conversations
     description: List conversations and private chat management.
   - name: messages
@@ -44,7 +44,7 @@ tags:
   - name: users
     description: User profiles, avatars, username changes, and add-friend QR codes.
   - name: stories
-    description: 24-hour media stories — post, view, reply, record views.
+    description: "24-hour media stories: post, view, reply, record views."
 
 components:
   securitySchemes:
@@ -57,7 +57,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Short-lived onboarding JWT returned by OTP verification.
+      description: Short-lived registration, password setup, or MFA JWT returned by the authentication flow.
 
   schemas:
     # ─── Primitives ─────────────────────────────────────────────────────────────
@@ -98,6 +98,22 @@ components:
           type: boolean
           description: True until the user enables TOTP.
       required: [ok, user, requires_totp_setup]
+
+    MfaRequiredResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        mfa_required:
+          type: boolean
+          example: true
+        mfa_token:
+          type: string
+          description: >
+            Five-minute JWT. Send as `Authorization: Bearer <token>` to
+            `/api/auth/totp/verify-login`.
+      required: [ok, mfa_required, mfa_token]
 
     RegistrationTokenResponse:
       type: object
@@ -282,7 +298,7 @@ components:
           type: object
           description: >
             Optional metadata: `reply_to` (quoted message), `hearts` (list of user IDs
-            who reacted ❤️), `story_reply` (story context).
+            who reacted with the heart emoji), `story_reply` (story context).
 
     # ─── Conversation ───────────────────────────────────────────────────────────
     Conversation:
@@ -331,7 +347,7 @@ components:
           additionalProperties:
             type: string
             format: date-time
-          description: "Map of user_id → last_read_at (group conversations only)."
+          description: "Map of user_id to last_read_at (group conversations only)."
         last_message_preview:
           type: string
           example: "Hey, what's up?"
@@ -452,8 +468,9 @@ paths:
       summary: Verify email OTP
       description: >
         Verifies an email OTP. Existing users with a completed password receive
-        an authenticated session cookie. New or incomplete users receive a
-        short-lived token for the next onboarding step.
+        an authenticated session cookie, or an MFA token when TOTP is enabled.
+        New or incomplete users receive a short-lived token for the next
+        onboarding step.
       security: []
       requestBody:
         required: true
@@ -474,12 +491,13 @@ paths:
         '200':
           description: >
             OTP accepted. Response is one of: authenticated session,
-            registration token, or password-setup token.
+            MFA challenge, registration token, or password-setup token.
           content:
             application/json:
               schema:
                 oneOf:
                   - $ref: '#/components/schemas/AuthSessionResponse'
+                  - $ref: '#/components/schemas/MfaRequiredResponse'
                   - $ref: '#/components/schemas/RegistrationTokenResponse'
                   - $ref: '#/components/schemas/PasswordSetupTokenResponse'
         '400':
@@ -589,7 +607,8 @@ paths:
       tags: [auth]
       summary: Log in
       description: >
-        Authenticates with email + password and sets the JWT cookie.
+        Authenticates with email + password. If TOTP is not enabled, sets the
+        JWT cookie. If TOTP is enabled, returns a short-lived MFA token instead.
       security: []
       requestBody:
         required: true
@@ -608,10 +627,13 @@ paths:
                   example: "Abcdefg1"
       responses:
         '200':
-          description: Login successful. JWT cookie is set.
+          description: Login accepted. Response is either an authenticated session or an MFA challenge.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthSessionResponse' }
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AuthSessionResponse'
+                  - $ref: '#/components/schemas/MfaRequiredResponse'
         '400':
           description: Missing password/email, incomplete registration, or password not set.
           content:
@@ -677,7 +699,7 @@ paths:
       description: >
         Generates a new TOTP secret, returns the `otpauth://` URI, a QR code
         data-URI, and one-time recovery codes. The secret is saved but
-        `totp_enabled` stays `false` until confirmed via `/totp/confirm`.
+        `totp_enabled` stays `false` until confirmed via `/api/auth/totp/confirm`.
       responses:
         '200':
           description: TOTP secret ready to scan.
@@ -720,6 +742,48 @@ paths:
                   user: { $ref: '#/components/schemas/User' }
         '400':
           description: Invalid or missing TOTP code.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/auth/totp/verify-login:
+    post:
+      tags: [auth]
+      summary: Verify TOTP during login
+      description: >
+        Completes an MFA login challenge. Requires `Authorization: Bearer
+        <mfa_token>` returned by `/api/auth/login` or `/api/auth/otp/verify`;
+        the token must contain purpose `mfa_verification`. On success, sets the
+        authenticated JWT cookie.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, example: "123456" }
+      responses:
+        '200':
+          description: TOTP accepted. JWT cookie is set.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSessionResponse' }
+        '400':
+          description: Invalid TOTP code or TOTP is not enabled for the account.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Too many failed MFA attempts; the MFA session was revoked.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Token is not an MFA verification session.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -889,6 +953,10 @@ paths:
           application/json:
             schema:
               type: object
+              description: Provide either `uuid` or `username`.
+              anyOf:
+                - required: [uuid]
+                - required: [username]
               properties:
                 uuid:
                   type: string
@@ -917,6 +985,11 @@ paths:
                       conversation: { $ref: '#/components/schemas/Conversation' }
         '400':
           description: Invalid UUID, already friends, or request already sent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Target user does not exist or is not discoverable.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -958,6 +1031,11 @@ paths:
                       conversation: { $ref: '#/components/schemas/Conversation' }
         '400':
           description: No QR found, invalid payload, or already friends.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Target user does not exist.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1133,6 +1211,11 @@ paths:
                 properties:
                   ok: { type: boolean, example: true }
                   conversation: { $ref: '#/components/schemas/Conversation' }
+        '400':
+          description: Invalid target user, such as trying to open a private conversation with yourself.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
         '404':
           description: User not found.
           content:
@@ -1161,6 +1244,11 @@ paths:
                 properties:
                   ok: { type: boolean, example: true }
                   read_at: { type: string, format: date-time }
+        '404':
+          description: Conversation not found or current user is not a participant.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/conversations/{conversation_id}/membership:
     delete:
@@ -1225,6 +1313,11 @@ paths:
                   messages:
                     type: array
                     items: { $ref: '#/components/schemas/Message' }
+        '404':
+          description: Conversation not found or current user is not a participant.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
     post:
       tags: [messages]
@@ -1263,6 +1356,11 @@ paths:
                   message: { $ref: '#/components/schemas/Message' }
         '400':
           description: Empty body or message too long.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Conversation not found or current user is not a participant.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1311,6 +1409,16 @@ paths:
                 properties:
                   ok: { type: boolean, example: true }
                   message: { $ref: '#/components/schemas/Message' }
+        '400':
+          description: Missing file or unsupported upload.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Conversation not found or current user is not a participant.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/attachments/{attachment_id}:
     get:
@@ -1372,6 +1480,11 @@ paths:
                 properties:
                   ok: { type: boolean, example: true }
                   message: { $ref: '#/components/schemas/Message' }
+        '400':
+          description: Message body is empty.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
         '403':
           description: Not your message or not a text message.
           content:
@@ -1410,14 +1523,20 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Message not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/messages/{message_id}/react:
     post:
       tags: [messages]
-      summary: Toggle ❤️ reaction
+      summary: Toggle heart reaction
       description: >
-        Toggles a ❤️ heart reaction on a message. Adds the reaction if you
-        haven't reacted; removes it if you have. Only `❤️` is supported.
+        Toggles a heart reaction on a message. Adds the reaction if you
+        haven't reacted; removes it if you have. Only the heart emoji is
+        supported.
         Emits `message:reaction`.
       parameters:
         - name: message_id
@@ -1431,7 +1550,7 @@ paths:
             schema:
               type: object
               properties:
-                emoji: { type: string, example: "❤️", default: "❤️" }
+                emoji: { type: string, example: "\u2764\ufe0f", default: "\u2764\ufe0f" }
       responses:
         '200':
           description: Reaction toggled.
@@ -1442,6 +1561,16 @@ paths:
                 properties:
                   ok: { type: boolean, example: true }
                   message: { $ref: '#/components/schemas/Message' }
+        '400':
+          description: Unsupported emoji or message is deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Message not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   # ═══════════════════════════════════════════════════════════════════════════════
   # GROUPS
@@ -1486,7 +1615,7 @@ paths:
       summary: Get public group metadata (unauthenticated)
       description: >
         Returns a group's title, description, member count, and invite URL.
-        Does **not** require authentication — used for invite preview pages.
+        Does **not** require authentication; used for invite preview pages.
       security: []
       parameters:
         - name: share_token
@@ -1568,6 +1697,16 @@ paths:
                         - type: object
                           properties:
                             role: { type: string, enum: [owner, admin, member] }
+        '400':
+          description: Conversation is not a group.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Conversation not found or current user is not a participant.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
     post:
       tags: [groups]
@@ -1603,7 +1742,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
         '404':
-          description: User not found.
+          description: Conversation or user not found.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1663,6 +1802,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Conversation not found or current user is not a participant.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   # ═══════════════════════════════════════════════════════════════════════════════
   # USERS
@@ -1704,7 +1848,7 @@ paths:
       summary: Get your add-friend QR code (PNG)
       description: >
         Returns a PNG image of the QR code that encodes your
-        `https://…/add/{uuid}` add-friend link. Scan with the app to send a
+        `https://example.com/add/{uuid}` add-friend link. Scan with the app to send a
         friend request.
       responses:
         '200':
@@ -1753,7 +1897,7 @@ paths:
       summary: Change username
       description: >
         Changes the current user's username. Limited to **2 changes per 14
-        days**. The new username must be 3–24 characters, letters/numbers/underscores only,
+        days**. The new username must be 3-24 characters, letters/numbers/underscores only,
         and not already taken.
       requestBody:
         required: true
@@ -1763,7 +1907,7 @@ paths:
               type: object
               required: [username]
               properties:
-                username: { type: string, minLength: 3, maxLength: 24, example: "alice_new" }
+                username: { type: string, minLength: 3, maxLength: 24, pattern: '^[A-Za-z0-9_]+$', example: "alice_new" }
       responses:
         '200':
           description: Username changed.
@@ -1857,8 +2001,8 @@ paths:
           content:
             image/png:
               schema: { type: string, format: binary }
-        '400':
-          description: Not a group conversation.
+        '404':
+          description: Conversation not found, current user is not a participant, or no public invite link exists.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -1903,7 +2047,7 @@ paths:
               required: [file]
               properties:
                 file: { type: string, format: binary }
-                caption: { type: string, example: "Good morning! ☀️" }
+                caption: { type: string, example: "Good morning!" }
       responses:
         '201':
           description: Story posted.
@@ -1942,6 +2086,11 @@ paths:
               schema: { type: string, format: binary }
         '403':
           description: Not a friend of the story author.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Story not found.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -2020,7 +2169,7 @@ paths:
       tags: [stories]
       summary: Record a story view
       description: >
-        Records that the current user viewed a story. Idempotent — viewing the
+        Records that the current user viewed a story. Idempotent: viewing the
         same story multiple times is recorded only once. Views on your own
         stories are silently ignored.
       parameters:
@@ -2034,6 +2183,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Ok' }
+        '404':
+          description: Story not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
 
   /api/stories/{story_id}/views:
     get:
@@ -2067,3 +2221,6 @@ paths:
                         viewed_at: { type: string, format: date-time }
         '403':
           description: Not the story author.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }

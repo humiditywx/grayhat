@@ -26,7 +26,7 @@ async function request(url, options = {}) {
 const get  = (url) => request(url)
 const post = (url, body) => request(url, { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body) })
 const patch = (url, body) => request(url, { method: 'PATCH', body: JSON.stringify(body) })
-const del  = (url) => request(url)
+const del  = (url) => request(url, { method: 'DELETE' })
 
 // Auth
 export const authMe           = () => get('/api/auth/me')
@@ -48,6 +48,7 @@ export const setupPassword    = (b, token) => request('/api/auth/password/setup'
 export const authLogout       = () => post('/api/auth/logout', {})
 export const totpSetup     = () => post('/api/auth/totp/setup', {})
 export const totpConfirm   = (code) => post('/api/auth/totp/confirm', { code })
+export const totpDisable   = () => post('/api/auth/totp/disable', {})
 export const verifyTotpLogin = (code, token) => request('/api/auth/totp/verify-login', {
   method: 'POST',
   body: JSON.stringify({ code }),

@@ -295,6 +295,17 @@ def totp_confirm():
     return jsonify({'ok': True, 'user': serialize_user(current_user)})
 
 
+@auth_bp.post('/totp/disable')
+@jwt_required()
+def totp_disable():
+    current_user.totp_enabled = False
+    current_user.totp_secret_encrypted = None
+    current_user.recovery_codes = []
+    current_user.totp_attempts = 0
+    db.session.commit()
+    return jsonify({'ok': True, 'user': serialize_user(current_user)})
+
+
 @auth_bp.post('/totp/verify-login')
 @jwt_required()
 def totp_verify_login():
