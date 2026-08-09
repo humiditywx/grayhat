@@ -18,6 +18,7 @@ from .blueprints.api import api_bp
 from .blueprints.auth import auth_bp
 from .blueprints.docs import docs_bp
 from .blueprints.pages import pages_bp
+from .blueprints.admin import admin_bp
 from .config import Config
 from .extensions import db, jwt, limiter, socketio
 from .models import RevokedToken, User
@@ -50,6 +51,7 @@ def create_app(config_object: type[Config] = Config) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(docs_bp)
+    app.register_blueprint(admin_bp)
 
     _register_jwt_handlers(app)
     _register_app_hooks(app)
@@ -83,7 +85,7 @@ def _run_column_migrations(app: Flask) -> None:
             all_known = {'users', 'friendships', 'friend_requests', 'conversations',
                          'conversation_participants', 'private_conversation_indices',
                          'messages', 'attachments', 'revoked_tokens', 'stories',
-                         'story_views', 'call_presences', 'otps'}
+                         'story_views', 'call_presences', 'otps', 'audit_logs'}
             if not all_known.issubset(existing_tables):
                 db.create_all()
                 inspector = inspect(db.engine)  # refresh after table creation
@@ -98,6 +100,8 @@ def _run_column_migrations(app: Flask) -> None:
                 stmts.append("ALTER TABLE users ADD COLUMN username_changed_at JSON NOT NULL DEFAULT '[]'")
             if 'totp_attempts' not in existing_cols:
                 stmts.append("ALTER TABLE users ADD COLUMN totp_attempts INTEGER NOT NULL DEFAULT 0")
+            if 'is_banned' not in existing_cols:
+                stmts.append("ALTER TABLE users ADD COLUMN is_banned BOOLEAN NOT NULL DEFAULT FALSE")
             # Indexes added after initial deploy — CREATE INDEX IF NOT EXISTS is idempotent
             stmts += [
                 "CREATE INDEX IF NOT EXISTS ix_cp_conversation ON conversation_participants (conversation_id)",

@@ -431,6 +431,15 @@ export default function Sidebar({ mobileHidden }) {
             style={{ display: 'none' }}
             onChange={handleCameraCapture}
           />
+          
+          {state.me?.email?.endsWith('@grayhat.com.az') && (
+            <button className={`nav-tab${panel === 'admin' ? ' active' : ''}`} onClick={() => dispatch({ type: 'SET_PANEL', panel: 'admin' })}>
+              <span className="nav-icon">
+                <AeroIcon name="settings" size={22} />
+              </span>
+              Admin
+            </button>
+          )}
 
           <button className={`nav-tab${panel === 'profile' ? ' active' : ''}`} onClick={() => dispatch({ type: 'SET_PANEL', panel: 'profile' })}>
             <span className="nav-icon">

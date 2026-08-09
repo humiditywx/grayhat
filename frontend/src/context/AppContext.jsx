@@ -20,7 +20,7 @@ const initState = {
   typingUsers: {}, // { [convId]: { [userId]: username } }
 
   // UI
-  panel: 'chats',
+  panel: 'chats', // 'chats' | 'profile' | 'admin'
   selectedConvId: null,
   mobileChatOpen: false,
 

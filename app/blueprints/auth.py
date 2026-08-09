@@ -13,7 +13,7 @@ from flask_jwt_extended import (
 )
 
 from ..extensions import db, limiter
-from ..models import RevokedToken, User, OTP
+from ..models import RevokedToken, User, OTP, AuditLog
 from ..services.security import (
     build_provisioning_uri,
     check_password,
@@ -141,6 +141,12 @@ def verify_otp():
         user = User(email=email)
         db.session.add(user)
         db.session.commit()
+        
+        # Log registration started
+        audit = AuditLog(action='user_registration_started', target_user_id=user.id, details={'email': email})
+        db.session.add(audit)
+        db.session.commit()
+        
         return jsonify({
             'ok': True,
             'registered': False,
@@ -177,6 +183,11 @@ def register_complete():
     current_user.is_global = is_global
     db.session.commit()
 
+    # Log registration completed
+    audit = AuditLog(action='user_registration_completed', target_user_id=current_user.id, details={'username': username})
+    db.session.add(audit)
+    db.session.commit()
+
     return _issue_auth_response(current_user)
 
 
@@ -208,6 +219,9 @@ def login():
     user = User.query.filter_by(email=email).first()
     if not user:
         return jsonify({'ok': False, 'error': 'No account found with this email. Please use OTP to register.'}), 404
+        
+    if user.is_banned:
+        return jsonify({'ok': False, 'error': 'This account has been banned.'}), 403
 
     if not user.username:
         return jsonify({'ok': False, 'error': 'Registration is incomplete. Please use OTP to continue.'}), 400
@@ -220,6 +234,12 @@ def login():
 
     user.last_seen_at = datetime.now(timezone.utc)
     db.session.commit()
+    
+    # Log login
+    audit = AuditLog(action='user_login', target_user_id=user.id, details={'ip': request.remote_addr})
+    db.session.add(audit)
+    db.session.commit()
+    
     return _issue_auth_response(user)
 
 

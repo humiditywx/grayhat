@@ -13,6 +13,7 @@ import CallOverlay from './components/calls/CallOverlay.jsx'
 import UserProfilePage from './components/common/UserProfilePage.jsx'
 import MessageNotificationBanner from './components/common/MessageNotificationBanner.jsx'
 import FriendRequestBanner from './components/common/FriendRequestBanner.jsx'
+import AdminPanel from './components/panels/AdminPanel.jsx'
 import { authMe, bootstrap, joinGroup, sendFriendRequest } from './api.js'
 
 function AppInner() {
@@ -116,7 +117,7 @@ function AppInner() {
       <MessageNotificationBanner />
       <FriendRequestBanner />
       <Sidebar mobileHidden={sidebarHidden} />
-      <ChatPane />
+      {state.panel === 'admin' ? <AdminPanel /> : <ChatPane />}
       <IncomingCallDialog />
       <CallOverlay />
       <UserProfilePage />

@@ -30,6 +30,7 @@ class User(db.Model, TimestampMixin):
     totp_enabled = db.Column(db.Boolean, nullable=False, default=False)
     totp_attempts = db.Column(db.Integer, nullable=False, default=0)
     is_global = db.Column(db.Boolean, nullable=False, default=False)
+    is_banned = db.Column(db.Boolean, nullable=False, default=False)
     recovery_codes = db.Column(db.JSON, nullable=False, default=list)
     token_version = db.Column(db.Integer, nullable=False, default=0)
     last_seen_at = db.Column(db.DateTime(timezone=True), nullable=True)
@@ -244,3 +245,20 @@ class CallPresence(db.Model):
     user_id = db.Column(db.String(36), db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     mode = db.Column(db.String(16), nullable=False)
     joined_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+
+class AuditLog(db.Model):
+    __tablename__ = 'audit_logs'
+    __table_args__ = (
+        Index('ix_audit_logs_created_at', 'created_at'),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
+    admin_id = db.Column(db.String(36), db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    action = db.Column(db.String(255), nullable=False)
+    target_user_id = db.Column(db.String(36), db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    details = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+    
+    admin = db.relationship('User', foreign_keys=[admin_id])
+    target_user = db.relationship('User', foreign_keys=[target_user_id])
+

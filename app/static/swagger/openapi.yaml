@@ -2224,3 +2224,92 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # ADMIN
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  /api/admin/users:
+    get:
+      tags: [admin]
+      summary: List users
+      description: List users with pagination. Admin only.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, default: 50 }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: A list of users.
+
+  /api/admin/users/{user_id}:
+    get:
+      tags: [admin]
+      summary: Get user details
+      description: Get user details by ID. Admin only.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: User details.
+
+  /api/admin/users/{user_id}/ban:
+    put:
+      tags: [admin]
+      summary: Toggle ban for user
+      description: Ban or unban a user. Admin only.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_banned: { type: boolean, example: true }
+      responses:
+        '200':
+          description: User ban status updated.
+
+  /api/admin/users/{user_id}/password-reset:
+    post:
+      tags: [admin]
+      summary: Force reset user password
+      description: Force reset a user's password to a random secure string. Admin only.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Password reset successfully.
+
+  /api/admin/audit-logs:
+    get:
+      tags: [admin]
+      summary: Get audit logs
+      description: List audit logs. Admin only.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: A list of audit logs.

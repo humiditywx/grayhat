@@ -109,6 +109,13 @@ export const replyStory      = (id, body) => post(`/api/stories/${id}/reply`, { 
 export const viewStory       = (id) => post(`/api/stories/${id}/view`, {})
 export const getStoryViews   = (id) => get(`/api/stories/${id}/views`)
 
+// Admin
+export const adminListUsers = (page, search) => get(`/api/admin/users?page=${page}${search ? `&search=${search}` : ''}`)
+export const adminGetUser = (id) => get(`/api/admin/users/${id}`)
+export const adminToggleBan = (id, isBanned) => request(`/api/admin/users/${id}/ban`, { method: 'PUT', body: JSON.stringify({ is_banned: isBanned }) })
+export const adminResetPassword = (id) => post(`/api/admin/users/${id}/password-reset`, {})
+export const adminGetAuditLogs = (page) => get(`/api/admin/audit-logs?page=${page}`)
+
 /** Upload a story with XHR so upload progress can be tracked. */
 export const postStoryWithProgress = (fd, onProgress) =>
   new Promise((resolve, reject) => {
